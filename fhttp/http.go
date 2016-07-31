@@ -35,14 +35,21 @@ func WrapMW(handler fractals.Handler) func(http.ResponseWriter, *http.Request, m
 }
 
 // WrapMWWith returns a http.HandlerFunc which accepts an extra parameter and
-// passes the request objects to the handler.
+// passes the request objects to the handler. If no response was sent when
+// the handlers are runned and an error came back then we write the error
+// as response.
 func WrapMWWith(ctx context.Context, handler fractals.Handler) func(http.ResponseWriter, *http.Request, map[string]string) {
 	return func(w http.ResponseWriter, r *http.Request, params map[string]string) {
-		handler(ctx, nil, &Request{
+		rw := &Request{
 			Params: Param(params),
 			Res:    NewResponseWriter(w),
 			Req:    r,
-		})
+		}
+
+		_, err := handler(ctx, nil, rw)
+		if err != nil && !rw.Res.DataWritten() {
+			RenderResponseError(err, rw)
+		}
 	}
 }
 

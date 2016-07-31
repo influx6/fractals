@@ -249,6 +249,22 @@ func Wrap(node interface{}) Handler {
 	return hl
 }
 
+// DiscardData returns a new Handler which discards it's data and only forwards
+// it's errors.
+func DiscardData() Handler {
+	return func(ctx context.Context, err error, _ interface{}) (interface{}, error) {
+		return nil, err
+	}
+}
+
+// DiscardError returns a new Handler which discards it's errors and only forwards
+// its data.
+func DiscardError() Handler {
+	return func(ctx context.Context, _ error, data interface{}) (interface{}, error) {
+		return data, nil
+	}
+}
+
 // IdentityHandler returns a new Handler which forwards it's errors or data to
 // its subscribers.
 func IdentityHandler() Handler {

@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 )
 
 // Field defines a struct for collating fields errors that occur.
@@ -153,21 +154,27 @@ type ResponseWriter interface {
 	http.Flusher
 	// Status returns the status code of the response or 0 if the response has not been written.
 	Status() int
+
 	// Written returns whether or not the ResponseWriter has been written.
-	Written() bool
+	StatusWritten() bool
+
+	// DataWritten returns true/false if the response.Write method had been called.
+	DataWritten() bool
+
 	// Size returns the size of the response body.
 	Size() int
 }
 
 // NewResponseWriter creates a ResponseWriter that wraps an http.ResponseWriter
 func NewResponseWriter(rw http.ResponseWriter) ResponseWriter {
-	return &responseWriter{rw, 0, 0}
+	return &responseWriter{rw, 0, 0, 0}
 }
 
 type responseWriter struct {
 	http.ResponseWriter
-	status int
-	size   int
+	status    int
+	size      int
+	datawrite int64
 }
 
 func (rw *responseWriter) WriteHeader(s int) {
@@ -176,10 +183,14 @@ func (rw *responseWriter) WriteHeader(s int) {
 }
 
 func (rw *responseWriter) Write(b []byte) (int, error) {
-	if !rw.Written() {
-		// The status will be StatusOK if WriteHeader has not been called yet
+
+	// The status will be StatusOK if WriteHeader has not been called yet
+	if !rw.StatusWritten() {
 		rw.WriteHeader(http.StatusOK)
 	}
+
+	atomic.StoreInt64(&rw.datawrite, 1)
+
 	size, err := rw.ResponseWriter.Write(b)
 	rw.size += size
 	return size, err
@@ -193,7 +204,11 @@ func (rw *responseWriter) Size() int {
 	return rw.size
 }
 
-func (rw *responseWriter) Written() bool {
+func (rw *responseWriter) DataWritten() bool {
+	return atomic.LoadInt64(&rw.datawrite) > 0
+}
+
+func (rw *responseWriter) StatusWritten() bool {
 	return rw.status != 0
 }
 
