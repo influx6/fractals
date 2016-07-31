@@ -194,20 +194,15 @@ func Wrap(node interface{}) Handler {
 				resArgs = tm.Call(nil)
 			} else {
 				// fmt.Printf("%t:%t:%t -> %+s:%+s\n", useContext, useErr, useData, err, data)
+				if isCustom && !useErr && err != nil {
+					return nil, err
+				}
 
 				if !useContext && !useData && useErr && err != nil {
 					return nil, err
 				}
 
 				if useContext && !useData && useErr && err != nil {
-					return nil, err
-				}
-
-				if useContext && useData && isCustom && !useErr && err != nil {
-					return nil, err
-				}
-
-				if !useContext && useData && isCustom && !useErr && err != nil {
 					return nil, err
 				}
 
