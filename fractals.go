@@ -482,14 +482,61 @@ func WrapHandlers(h1 Handler, h2 Handler) Handler {
 
 //==============================================================================
 
-// LiftHandler defines the type the Node function returns which allows providers
-// to assign handlers to use for
-type LiftHandler func(...Handler) Handler
+// LiftHandler defines a type that takes a interface which must be a function
+// and wraps it inside a Handler, returning that Handler.
+type LiftHandler func(interface{}) Handler
 
-// Lift returns the a serializing handler where the passed in handler is the
-// last function to be called. If the value of the argument is not a function,
-// then it panics.
-func Lift(handle interface{}) LiftHandler {
+// Lift takes a series of handlers which handlers which it combines serially,
+// it returns a function that takes a final function to receive results. Passing
+// results from the previous to the next function to be called.
+// If the value of the argument is not a function, then it panics.
+func Lift(lifts ...Handlers) LiftHandler {
+
+	// We will stack the handlers where one outputs becomes the input of the next.
+	return func(handle interface{}) Handler {
+		mh := Wrap(handle)
+		if mh == nil {
+			panic("Expected handle passed into be a function")
+		}
+
+		var base Handler
+
+		lifts = append(lifts, mh)
+
+		for i := len(lifts) - 1; i >= 0; i-- {
+			if lifts[i] == nil {
+				continue
+			}
+
+			if base == nil {
+				base = lifts[i]
+				continue
+			}
+
+			base = WrapHandlers(lifts[i], base)
+		}
+
+		base = WrapHandlers(base, mh)
+
+		return func(ctx Ctx, err error, data interface{}) (interface{}, error) {
+			if base != nil {
+				return base(ctx, err, data)
+			}
+
+			return data, err
+		}
+	}
+}
+
+// RLiftHandler defines the type the Node function returns which allows providers
+// to assign handlers to use for
+type RLiftHandler func(...Handler) Handler
+
+// RLift takes a handler as the last call and returns the a function that allows
+// you to supply handlers which it combines serially. Lifting from the right.
+// Passing results from the previous to the next function to be called.
+// If the value of the argument is not a function, then it panics.
+func RLift(handle interface{}) RLiftHandler {
 	mh := Wrap(handle)
 	if mh == nil {
 		panic("Expected handle passed into be a function")
@@ -526,7 +573,30 @@ func Lift(handle interface{}) LiftHandler {
 
 // Distribute takes the output from the provided handle and distribute
 // it's returned values to the provided Handlers.
-func Distribute(handle interface{}) LiftHandler {
+func Distribute(lifts ...Handler) LiftHandler {
+
+	// We will stack the handlers where one outputs becomes the input of the next.
+	return func(handle interface{}) Handler {
+		mh := Wrap(handle)
+		if mh == nil {
+			panic("Expected handle passed into be a function")
+		}
+
+		return func(ctx Ctx, err error, data interface{}) (interface{}, error) {
+			m1, e1 := mh(ctx, err, data)
+
+			for _, lh := range lifts {
+				lh(ctx, e1, m1)
+			}
+
+			return m1, e1
+		}
+	}
+}
+
+// RDistribute takes the output from the provided handle and distribute
+// it's returned values to the provided Handlers.
+func RDistribute(handle interface{}) RLiftHandler {
 	mh := Wrap(handle)
 	if mh == nil {
 		panic("Expected handle passed into be a function")
@@ -555,7 +625,37 @@ type Response struct {
 // DistributeButPack takes the output from the provided handle and distribute
 // it's returned values to the provided Handlers and packs their responses in a
 // slice []Response and returns that as the final response.
-func DistributeButPack(handle interface{}) LiftHandler {
+func DistributeButPack(lifts ...Handler) LiftHandler {
+
+	// We will stack the handlers where one outputs becomes the input of the next.
+	return func(handle interface{}) Handler {
+		mh := Wrap(handle)
+		if mh == nil {
+			panic("Expected handle passed into be a function")
+		}
+
+		return func(ctx Ctx, err error, data interface{}) (interface{}, error) {
+			var pack []Response
+
+			m1, e1 := mh(ctx, err, data)
+
+			for _, lh := range lifts {
+				ld, le := lh(ctx, e1, m1)
+				pack = append(pack, Response{
+					Err:   le,
+					Value: ld,
+				})
+			}
+
+			return pack, nil
+		}
+	}
+}
+
+// RDistributeButPack takes the output from the provided handle and distribute
+// it's returned values to the provided Handlers and packs their responses in a
+// slice []Response and returns that as the final response.
+func RDistributeButPack(handle interface{}) RLiftHandler {
 	mh := Wrap(handle)
 	if mh == nil {
 		panic("Expected handle passed into be a function")
@@ -584,7 +684,36 @@ func DistributeButPack(handle interface{}) LiftHandler {
 // Collect takes all the returned values by passing the recieved arguments and
 // applying them to the handle. Where the responses of the handle is packed into
 // an array of type []Collected and then returned as the response of the function.
-func Collect(handle interface{}) LiftHandler {
+func Collect(lifts ...Handler) LiftHandler {
+
+	// We will stack the handlers where one outputs becomes the input of the next.
+	return func(handle interface{}) Handler {
+		mh := Wrap(handle)
+		if mh == nil {
+			panic("Expected handle passed into be a function")
+		}
+
+		return func(ctx Ctx, err error, data interface{}) (interface{}, error) {
+			var pack []Response
+
+			for _, lh := range lifts {
+				m1, e1 := lh(ctx, err, data)
+				d1, de := mh(ctx, e1, m1)
+				pack = append(pack, Response{
+					Err:   de,
+					Value: d1,
+				})
+			}
+
+			return pack, nil
+		}
+	}
+}
+
+// RCollect takes all the returned values by passing the recieved arguments and
+// applying them to the handle. Where the responses of the handle is packed into
+// an array of type []Collected and then returned as the response of the function.
+func RCollect(handle interface{}) RLiftHandler {
 	mh := Wrap(handle)
 	if mh == nil {
 		panic("Expected handle passed into be a function")
