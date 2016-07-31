@@ -3,9 +3,11 @@ package fs
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/influx6/faux/context"
 	"github.com/influx6/fractals"
@@ -336,6 +338,56 @@ func Mkdir(path string, chain bool) fractals.Handler {
 		}
 
 		return nil
+	})
+}
+
+// ResolvePathIn returns an ExtendedFileInfo for paths recieved if they match
+// a specific root directory once resolved using the root directory.
+func ResolvePathIn(rootDir string) fractals.Handler {
+	return fractals.MustWrap(func(ctx context.Context, path string) (ExtendedFileInfo, error) {
+		absRoot, err := filepath.Abs(rootDir)
+		if err != nil {
+			return nil, err
+		}
+
+		rootPath := filepath.Clean(absRoot)
+		finalPath := filepath.Clean(filepath.Join(rootDir, path))
+
+		if strings.Contains(finalPath, rootPath) {
+			return nil, fmt.Errorf("%q not within %q root", path, rootDir)
+		}
+
+		file, err := os.Open(finalPath)
+		if err != nil {
+			return nil, err
+		}
+
+		stat, err := file.Stat()
+		if err != nil {
+			return nil, err
+		}
+
+		return NewExtendedFileInfo(stat, filepath.Base(finalPath)), nil
+	})
+}
+
+// ResolvePathStringIn returns the full valid path for paths recieved if they match
+// a specific root directory once resolved using the root directory.
+func ResolvePathStringIn(rootDir string) fractals.Handler {
+	return fractals.MustWrap(func(ctx context.Context, path string) (string, error) {
+		absRoot, err := filepath.Abs(rootDir)
+		if err != nil {
+			return "", err
+		}
+
+		rootPath := filepath.Clean(absRoot)
+		finalPath := filepath.Clean(filepath.Join(rootDir, path))
+
+		if strings.Contains(finalPath, rootPath) {
+			return "", fmt.Errorf("%q not within %q root", path, rootDir)
+		}
+
+		return finalPath, nil
 	})
 }
 
