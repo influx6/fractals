@@ -2,6 +2,8 @@ package fhttp
 
 import (
 	"net/http"
+	"os"
+	"os/signal"
 
 	"github.com/influx6/faux/context"
 	"github.com/influx6/fractals"
@@ -42,4 +44,28 @@ func WrapMWWith(ctx context.Context, handler fractals.Handler) func(http.Respons
 			Req:    r,
 		})
 	}
+}
+
+// LaunchHTTP lunches a http server, setting up the signal handler needed.
+func LaunchHTTP(addr string, mux http.Handler) {
+	go func() {
+		http.ListenAndServe(addr, mux)
+	}()
+
+	// Listen for an interrupt signal from the OS.
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt)
+	<-sigChan
+}
+
+// LaunchHTTPS lunches a http server, setting up the signal handler needed.
+func LaunchHTTPS(addr string, tlsKey string, tlsCert string, mux http.Handler) {
+	go func() {
+		http.ListenAndServeTLS(addr, tlsCert, tlsKey, mux)
+	}()
+
+	// Listen for an interrupt signal from the OS.
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt)
+	<-sigChan
 }
