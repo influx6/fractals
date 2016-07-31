@@ -1,8 +1,8 @@
 # Fractals
-Fractal evolved out of an experiement in using middleware like patterns to create
-functional programming primitives in Go. It uses functions as its expressive
-approach to create operations that both are pure and combinative. It's not a
-new language or dsl but rather a different approach in thinking.
+Fractal evolved out of an experiment in using middleware like patterns to create
+functional programming behavior in Go. It provides functions as its expressive
+approach to create operations that both are pure and combinative. In essence
+follows the idea of a stack of task combined for reuse.
 
 ## Install
 

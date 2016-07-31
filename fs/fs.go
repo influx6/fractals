@@ -7,13 +7,14 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/influx6/faux/context"
 	"github.com/influx6/fractals"
 )
 
 // ReadFile adds a readFile operation whoes contents get passed to the next
 // event/Node/Task in the link.
 func ReadFile() fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, path string) ([]byte, error) {
+	return fractals.MustWrap(func(ctx context.Context, path string) ([]byte, error) {
 		file, err := os.Open(path)
 		if err != nil {
 			return nil, err
@@ -34,7 +35,7 @@ func ReadFile() fractals.Handler {
 // ReadReaderAndClose reads the data pulled from the received reader from the
 // pipeline.
 func ReadReaderAndClose() fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, r io.ReadCloser) ([]byte, error) {
+	return fractals.MustWrap(func(ctx context.Context, r io.ReadCloser) ([]byte, error) {
 		var buf bytes.Buffer
 		_, err := io.Copy(&buf, r)
 		if err != nil && err != io.EOF {
@@ -52,7 +53,7 @@ func ReadReaderAndClose() fractals.Handler {
 // ReadReader reads the data pulled from the received reader from the
 // pipeline.
 func ReadReader() fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, r io.Reader) ([]byte, error) {
+	return fractals.MustWrap(func(ctx context.Context, r io.Reader) ([]byte, error) {
 		var buf bytes.Buffer
 		_, err := io.Copy(&buf, r)
 		if err != nil && err != io.EOF {
@@ -65,7 +66,7 @@ func ReadReader() fractals.Handler {
 
 // ReplayBytes resends the data provided everytime it is called.
 func ReplayBytes(b []byte) fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx) []byte {
+	return fractals.MustWrap(func(ctx context.Context) []byte {
 		return b
 	})
 }
@@ -98,7 +99,7 @@ func ReplayReader(r io.Reader) fractals.Handler {
 // both allow the chain of events to continue and to allow others to use the data
 // as they please.
 func WriteBytes(data []byte) fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, w io.Writer) error {
+	return fractals.MustWrap(func(ctx context.Context, w io.Writer) error {
 		written, err := w.Write(data)
 		if err != nil {
 			return err
@@ -117,7 +118,7 @@ func WriteBytes(data []byte) fractals.Handler {
 // written does not match the size of the bytes. It passes the incoming data
 // down the pipeline.
 func WriteWriter(w io.Writer) fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, data []byte) error {
+	return fractals.MustWrap(func(ctx context.Context, data []byte) error {
 		written, err := w.Write(data)
 		if err != nil {
 			return err
@@ -133,7 +134,7 @@ func WriteWriter(w io.Writer) fractals.Handler {
 
 // Close expects to receive a closer in its pipeline and closest the closer.
 func Close() fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, w io.Closer) error {
+	return fractals.MustWrap(func(ctx context.Context, w io.Closer) error {
 		if err := w.Close(); err != nil {
 			return err
 		}
@@ -146,7 +147,7 @@ func Close() fractals.Handler {
 // writes the any recieved data into the file. It sends the file Handler,
 // down the piepline.
 func OpenFile(path string, append bool) fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, _ interface{}) (*os.File, error) {
+	return fractals.MustWrap(func(ctx context.Context, _ interface{}) (*os.File, error) {
 		file, err := os.Open(path)
 		if err != nil {
 			return nil, err
@@ -160,7 +161,7 @@ func OpenFile(path string, append bool) fractals.Handler {
 // CreateFile creates the giving file within the provided directly and sends
 // out the file handler.
 func CreateFile(path string, useRoot bool) fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, root string) (*os.File, error) {
+	return fractals.MustWrap(func(ctx context.Context, root string) (*os.File, error) {
 		if useRoot && root != "" {
 			path = filepath.Join(root, path)
 		}
@@ -178,7 +179,7 @@ func CreateFile(path string, useRoot bool) fractals.Handler {
 // the file object for this files down its pipeline. If it gets a string from
 // the pipeline, it uses that string if not empty as its root path.
 func MkFile(path string, useRoot bool) fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, root string) (*os.File, error) {
+	return fractals.MustWrap(func(ctx context.Context, root string) (*os.File, error) {
 		if useRoot && root != "" {
 			path = filepath.Join(root, path)
 		}
@@ -233,7 +234,7 @@ func (e extendedFileInfo) Path() string {
 // with a structure that implements the ExtendedFileInfo interface. It sends the
 // individual fileInfo instead of the slice of FileInfos.
 func ReadDir(path string) fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, _ interface{}) ([]ExtendedFileInfo, error) {
+	return fractals.MustWrap(func(ctx context.Context, _ interface{}) ([]ExtendedFileInfo, error) {
 		file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE, 0700)
 		if err != nil {
 			return nil, err
@@ -261,7 +262,7 @@ func ReadDir(path string) fractals.Handler {
 // with a structure that implements the ExtendedFileInfo interface. It sends the
 // individual fileInfo instead of the slice of FileInfos.
 func ReadDirPath() fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, path string) ([]ExtendedFileInfo, error) {
+	return fractals.MustWrap(func(ctx context.Context, path string) ([]ExtendedFileInfo, error) {
 		file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE, 0700)
 		if err != nil {
 			return nil, err
@@ -289,7 +290,7 @@ func ReadDirPath() fractals.Handler {
 // with a structure that implements the ExtendedFileInfo interface. It sends the
 // individual fileInfo instead of the slice of FileInfos.
 func WalkDir(path string) fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, _ interface{}) ([]ExtendedFileInfo, error) {
+	return fractals.MustWrap(func(ctx context.Context, _ interface{}) ([]ExtendedFileInfo, error) {
 		file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE, 0700)
 		if err != nil {
 			return nil, err
@@ -325,7 +326,7 @@ func WalkDir(path string) fractals.Handler {
 // an argument, will join the string recieved with the path provided.
 // This allows chaining mkdir paths down the pipeline.
 func Mkdir(path string, chain bool) fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, root string) error {
+	return fractals.MustWrap(func(ctx context.Context, root string) error {
 		if chain && root != "" {
 			path = filepath.Join(root, path)
 		}
@@ -341,7 +342,7 @@ func Mkdir(path string, chain bool) fractals.Handler {
 // ResolvePath resolves a giving path or sets of paths into their  absolute
 // form.
 func ResolvePath() fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, path interface{}) (interface{}, error) {
+	return fractals.MustWrap(func(ctx context.Context, path interface{}) (interface{}, error) {
 		switch path.(type) {
 		case string:
 			return filepath.Abs(path.(string))
@@ -367,7 +368,7 @@ func ResolvePath() fractals.Handler {
 // Remove deletes the giving path and passes the path down
 // the pipeline.
 func Remove(path string) fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, _ interface{}) error {
+	return fractals.MustWrap(func(ctx context.Context, _ interface{}) error {
 		if err := os.Remove(path); err != nil {
 			return err
 		}
@@ -380,7 +381,7 @@ func Remove(path string) fractals.Handler {
 // and passes the path down
 // the pipeline.
 func RemoveAll(path string) fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, _ interface{}) error {
+	return fractals.MustWrap(func(ctx context.Context, _ interface{}) error {
 		if err := os.RemoveAll(path); err != nil {
 			return err
 		}
@@ -394,7 +395,7 @@ func RemoveAll(path string) fractals.Handler {
 // If the filter function returns true, then any FileInfo/ExtendedFileInfo that
 // match its criteria are sent down its pipeline.
 func SkipStat(filter func(ExtendedFileInfo) bool) fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, info []ExtendedFileInfo) []ExtendedFileInfo {
+	return fractals.MustWrap(func(ctx context.Context, info []ExtendedFileInfo) []ExtendedFileInfo {
 		var filtered []ExtendedFileInfo
 
 		for _, dir := range info {
@@ -411,7 +412,7 @@ func SkipStat(filter func(ExtendedFileInfo) bool) fractals.Handler {
 // UnwrapStats takes the provided ExtendedFileInfo and unwraps them into their
 // full path, allows you to retrieve the strings path.
 func UnwrapStats() fractals.Handler {
-	return fractals.MustWrap(func(ctx fractals.Ctx, info []ExtendedFileInfo) []string {
+	return fractals.MustWrap(func(ctx context.Context, info []ExtendedFileInfo) []string {
 		var dirs []string
 
 		for _, dir := range info {

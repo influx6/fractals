@@ -1,4 +1,4 @@
-package pub_test
+package fractals_test
 
 import (
 	"errors"
@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/influx6/faux/context"
 	"github.com/influx6/fractals"
 )
 
@@ -20,8 +21,8 @@ const failedMark = "\u2717"
 func TestAutoFn(t *testing.T) {
 	var count int64
 
-	ctx := fractals.NewCtx()
-	pos := fractals.RLift(func(r fractals.Ctx, number int) int {
+	ctx := context.New()
+	pos := fractals.RLift(func(r context.Context, number int) int {
 		atomic.AddInt64(&count, 1)
 		return number * 2
 	})()
@@ -58,8 +59,8 @@ func BenchmarkNodes(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	ctx := fractals.NewCtx()
-	read := fractals.RLift(func(r fractals.Ctx, number int) int {
+	ctx := context.New()
+	read := fractals.RLift(func(r context.Context, number int) int {
 		return number * 2
 	})()
 
@@ -73,8 +74,8 @@ func BenchmarkNoReflect(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
-	ctx := fractals.NewCtx()
-	read := fractals.RLift(func(r fractals.Ctx, number interface{}) interface{} {
+	ctx := context.New()
+	read := fractals.RLift(func(r context.Context, number interface{}) interface{} {
 		return number.(int) * 2
 	})()
 
