@@ -9,5 +9,3 @@ new language or dsl but rather a different approach in thinking.
 ```
 go get -u -v github.com/influx6/fractals
 ```
-
-## Examples
