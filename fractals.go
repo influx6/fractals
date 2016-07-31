@@ -6,7 +6,6 @@
 package fractals
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"sync"
@@ -79,6 +78,22 @@ func Wrap(node interface{}) Handler {
 		hl = wrapData(node.(func(context.Context, interface{}) (interface{}, error)))
 	case func(context.Context, error) (interface{}, error):
 		hl = wrapError(node.(func(context.Context, error) (interface{}, error)))
+	case func(context.Context, error):
+		hl = func(ctx context.Context, err error, d interface{}) (interface{}, error) {
+			if err != nil {
+				node.(func(context.Context, error))(ctx, err)
+			}
+
+			return d, err
+		}
+	case func(context.Context, error) error:
+		hl = func(ctx context.Context, err error, d interface{}) (interface{}, error) {
+			if err != nil {
+				(node.(func(context.Context, error)))(ctx, err)
+			}
+
+			return d, err
+		}
 	case func(interface{}) interface{}:
 		hl = wrapDataOnly(node.(func(interface{}) interface{}))
 	case func(interface{}):
@@ -101,148 +116,156 @@ func Wrap(node interface{}) Handler {
 
 		dLen := len(args)
 
-		if dLen < 2 {
-			return nil
-		}
+		var data reflect.Type
+		var dZero reflect.Value
+
+		var useContext bool
+		var useErr bool
+		var useData bool
+		var isCustom bool
 
 		// Check if this first item is a context.Context type.
-		useContext, _ := reflection.CanSetForType(ctxType, args[0])
+		if dLen < 2 {
+			useContext, _ = reflection.CanSetForType(ctxType, args[0])
+			useErr, _ = reflection.CanSetForType(errorType, args[0])
 
-		var data reflect.Type
-		var isCustorm bool
-
-		if dLen > 2 {
-
-			// Check if this second item is a error type.
-			if ok, _ := reflection.CanSetForType(errorType, args[1]); !ok {
-				return nil
+			if !useErr {
+				data = args[0]
+				dZero = reflect.Zero(data)
+				useData = true
+				isCustom = true
 			}
-
-			data = args[2]
-		} else {
-			data = args[1]
-			isCustorm = true
 		}
 
-		dZero := reflect.Zero(data)
+		if dLen == 2 {
+			useContext, _ = reflection.CanSetForType(ctxType, args[0])
+			useErr, _ = reflection.CanSetForType(errorType, args[1])
+
+			if !useErr {
+				data = args[1]
+				dZero = reflect.Zero(data)
+				useData = true
+				isCustom = true
+			}
+		}
+
+		if dLen > 2 {
+			useContext, _ = reflection.CanSetForType(ctxType, args[0])
+			useErr, _ = reflection.CanSetForType(errorType, args[1])
+
+			data = args[2]
+			dZero = reflect.Zero(data)
+			useData = true
+		}
 
 		hl = func(ctx context.Context, err error, val interface{}) (interface{}, error) {
-			ma := reflect.ValueOf(ctx)
-			me := dZeroError
-
 			var fnArgs []reflect.Value
+			var resArgs []reflect.Value
+
+			var mctx reflect.Value
+
+			me := dZeroError
+			md := dZero
+
+			if useContext {
+				mctx = reflect.ValueOf(ctx)
+			}
 
 			if err != nil {
 				me = reflect.ValueOf(err)
-
-				if !isCustorm {
-					if useContext {
-						fnArgs = []reflect.Value{ma, me, dZero}
-					} else {
-						fnArgs = []reflect.Value{me, dZero}
-					}
-
-					resArgs := tm.Call(fnArgs)
-
-					if len(resArgs) < 1 {
-						return nil, nil
-					}
-
-					if len(resArgs) == 1 {
-						rVal := resArgs[0].Interface()
-						if dx, ok := rVal.(error); ok {
-							return nil, dx
-						}
-
-						return rVal, nil
-					}
-
-					mr1 := resArgs[0].Interface()
-					mr2 := resArgs[1].Interface()
-
-					if emr2, ok := mr2.(error); ok {
-						return mr1, emr2
-					}
-
-					return mr1, nil
-				}
-
-				return nil, err
 			}
 
-			mVal := dZero
+			// Flag to skip function if data does not match.
+			breakOfData := true
 
-			if val != nil {
-				mVal = reflect.ValueOf(val)
+			if val != nil && useData {
+				ok, convertData := reflection.CanSetForType(data, reflect.TypeOf(val))
+				if ok {
+					breakOfData = false
+					md = reflect.ValueOf(val)
 
-				ok, convert := reflection.CanSetFor(data, mVal)
-				if !ok {
-					return nil, errors.New("Invalid Type Received")
-				}
-
-				if convert {
-					mVal, err = reflection.Convert(data, mVal)
-					if err != nil {
-						return nil, errors.New("Type Conversion Failed")
+					if convertData {
+						md = md.Convert(data)
 					}
 				}
-
 			}
 
-			if !isCustorm {
-				fnArgs = []reflect.Value{ma, me, mVal}
-				resArgs := tm.Call(fnArgs)
-				if len(resArgs) < 1 {
+			if !useContext && !useData && !useErr {
+				resArgs = tm.Call(nil)
+			} else {
+				// fmt.Printf("%t:%t:%t -> %+s:%+s\n", useContext, useErr, useData, err, data)
+
+				if !useContext && !useData && useErr && err != nil {
+					return nil, err
+				}
+
+				if useContext && !useData && useErr && err != nil {
+					return nil, err
+				}
+
+				if useContext && useData && isCustom && !useErr && err != nil {
+					return nil, err
+				}
+
+				if !useContext && useData && isCustom && !useErr && err != nil {
+					return nil, err
+				}
+
+				// Call the function if it only cares about the error
+				if useContext && useErr && me != dZeroError && !useData {
+					fnArgs = []reflect.Value{mctx, me}
+				}
+
+				// If data does not match then skip this fall.
+				if breakOfData && len(fnArgs) < 1 {
 					return nil, nil
 				}
 
-				if len(resArgs) == 1 {
-					rVal := resArgs[0].Interface()
-					if dx, ok := rVal.(error); ok {
-						return nil, dx
+				if !breakOfData {
+					if useContext && useErr && useData {
+						fnArgs = []reflect.Value{mctx, me, md}
 					}
 
-					return rVal, nil
+					if useContext && !useErr && useData {
+						fnArgs = []reflect.Value{mctx, md}
+					}
+
+					if !useContext && useData && useErr {
+						fnArgs = []reflect.Value{me, md}
+					}
+
+					if !useContext && useData && !useErr {
+						fnArgs = []reflect.Value{md}
+					}
 				}
 
-				mr1 := resArgs[0].Interface()
-				mr2 := resArgs[1].Interface()
+				resArgs = tm.Call(fnArgs)
+			}
 
-				if emr2, ok := mr2.(error); ok {
-					return mr1, emr2
+			resLen := len(resArgs)
+			if resLen > 0 {
+
+				if resLen < 2 {
+					rOnly := resArgs[0]
+
+					if erErr, ok := rOnly.Interface().(error); ok {
+						return nil, erErr
+					}
+
+					return rOnly.Interface(), nil
 				}
 
-				return mr1, nil
-			}
+				rData := resArgs[0].Interface()
+				rErr := resArgs[1].Interface()
 
-			if useContext {
-				fnArgs = []reflect.Value{ma, mVal}
-			} else {
-				fnArgs = []reflect.Value{mVal}
-			}
-
-			resArgs := tm.Call(fnArgs)
-			if len(resArgs) < 1 {
-				return nil, nil
-			}
-
-			if len(resArgs) == 1 {
-				rVal := resArgs[0].Interface()
-				if dx, ok := rVal.(error); ok {
-					return nil, dx
+				if erErr, ok := rErr.(error); ok {
+					return rData, erErr
 				}
 
-				return rVal, nil
+				return rData, nil
 			}
 
-			mr1 := resArgs[0].Interface()
-			mr2 := resArgs[1].Interface()
-
-			if emr2, ok := mr2.(error); ok {
-				return mr1, emr2
-			}
-
-			return mr1, nil
+			return dZero, nil
 		}
 	}
 

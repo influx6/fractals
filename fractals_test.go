@@ -16,6 +16,49 @@ const succeedMark = "\u2713"
 // failedMark is the Unicode codepoint for an X mark.
 const failedMark = "\u2717"
 
+// TestBasicFn  validates the use of reflection with giving types to test use of
+// the form in fractals.
+func TestBasicFn(t *testing.T) {
+	var count int64
+
+	ctx := context.New()
+	pos := fractals.RLift(func(r context.Context, err error, number int) int {
+		atomic.AddInt64(&count, 1)
+		return number * 2
+	})()
+
+	err := errors.New("Ful")
+	digit, e := pos(ctx, err, 0)
+	if e == err {
+		fatalFailed(t, "Should have not recieved err %s but got %s", err, e)
+	}
+	logPassed(t, "Should have not recieved err ")
+
+	if digit != 0 {
+		fatalFailed(t, "Should have recieved zero as number %d but got %d", 0, digit)
+	}
+	logPassed(t, "Should have recieved zero %d", digit)
+
+	res, _ := pos(ctx, nil, 30)
+	if res != 60 {
+		fatalFailed(t, "Should have returned %d given %d", 60, 30)
+	}
+	logPassed(t, "Should have returned %d given %d", 60, 30)
+
+	pos(ctx, nil, "Word") // -> This would not be seen. Has it does not match int type.
+
+	res, _ = pos(ctx, nil, 20)
+	if res != 40 {
+		fatalFailed(t, "Should have returned %d given %d", 40, 20)
+	}
+	logPassed(t, "Should have returned %d given %d", 40, 20)
+
+	if atomic.LoadInt64(&count) != 3 {
+		fatalFailed(t, "Total processed values is not equal, expected %d but got %d", 2, count)
+	}
+	logPassed(t, "Total processed values was with count %d", count)
+}
+
 // TestAutoFn  validates the use of reflection with giving types to test use of
 // the form in fractals.
 func TestAutoFn(t *testing.T) {
