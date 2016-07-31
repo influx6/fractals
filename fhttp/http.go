@@ -1,6 +1,9 @@
 package fhttp
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,6 +19,57 @@ func CORS() fractals.Handler {
 		wm.Res.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		wm.Res.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		wm.Res.Header().Set("Access-Control-Max-Age", "86400")
+	})
+}
+
+// JSONDecoder decodes the data it recieves into an map type and returns the values.
+func JSONDecoder() fractals.Handler {
+	return fractals.MustWrap(func(ctx context.Context, data []byte) (map[string]interface{}, error) {
+		ms := make(map[string]interface{})
+
+		var b bytes.Buffer
+		b.Write(data)
+
+		if err := json.NewDecoder(&b).Decode(&ms); err != nil {
+			return nil, err
+		}
+
+		return ms, nil
+	})
+}
+
+// JSONWrite encodes the data it recieves into JSON and returns the values.
+func JSONWrite(data interface{}) fractals.Handler {
+	var bu bytes.Buffer
+	var done bool
+
+	return fractals.MustWrap(func(ctx context.Context, w io.Writer) error {
+		if !done {
+			if err := json.NewEncoder(&bu).Encode(data); err != nil {
+				return err
+			}
+
+			done = true
+		}
+
+		if _, err := w.Write(bu.Bytes()); err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+// JSONEncoder encodes the data it recieves into JSON and returns the values.
+func JSONEncoder() fractals.Handler {
+	return fractals.MustWrap(func(ctx context.Context, data interface{}) ([]byte, error) {
+		var d bytes.Buffer
+
+		if err := json.NewEncoder(&d).Encode(data); err != nil {
+			return nil, err
+		}
+
+		return d.Bytes(), nil
 	})
 }
 
