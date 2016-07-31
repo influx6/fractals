@@ -106,9 +106,7 @@ func Wrap(node interface{}) Handler {
 		}
 
 		// Check if this first item is a context.Context type.
-		if ok, _ := reflection.CanSetForType(ctxType, args[0]); !ok {
-			return nil
-		}
+		useContext, _ := reflection.CanSetForType(ctxType, args[0])
 
 		var data reflect.Type
 		var isCustorm bool
@@ -132,11 +130,20 @@ func Wrap(node interface{}) Handler {
 			ma := reflect.ValueOf(ctx)
 			me := dZeroError
 
+			var fnArgs []reflect.Value
+
 			if err != nil {
 				me = reflect.ValueOf(err)
 
 				if !isCustorm {
-					resArgs := tm.Call([]reflect.Value{ma, me, dZero})
+					if useContext {
+						fnArgs = []reflect.Value{ma, me, dZero}
+					} else {
+						fnArgs = []reflect.Value{me, dZero}
+					}
+
+					resArgs := tm.Call(fnArgs)
+
 					if len(resArgs) < 1 {
 						return nil, nil
 					}
@@ -183,8 +190,8 @@ func Wrap(node interface{}) Handler {
 			}
 
 			if !isCustorm {
-				dArgs := []reflect.Value{ma, me, mVal}
-				resArgs := tm.Call(dArgs)
+				fnArgs = []reflect.Value{ma, me, mVal}
+				resArgs := tm.Call(fnArgs)
 				if len(resArgs) < 1 {
 					return nil, nil
 				}
@@ -208,9 +215,13 @@ func Wrap(node interface{}) Handler {
 				return mr1, nil
 			}
 
-			dArgs := []reflect.Value{ma, mVal}
+			if useContext {
+				fnArgs = []reflect.Value{ma, mVal}
+			} else {
+				fnArgs = []reflect.Value{mVal}
+			}
 
-			resArgs := tm.Call(dArgs)
+			resArgs := tm.Call(fnArgs)
 			if len(resArgs) < 1 {
 				return nil, nil
 			}
