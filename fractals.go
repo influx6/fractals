@@ -68,6 +68,16 @@ func Wrap(node interface{}) Handler {
 	var hl Handler
 
 	switch node.(type) {
+	case func():
+		hl = func(ctx context.Context, err error, d interface{}) (interface{}, error) {
+			node.(func())()
+
+			if err != nil {
+				return nil, err
+			}
+
+			return d, err
+		}
 	case func(context.Context, error, interface{}) (interface{}, error):
 		hl = node.(func(context.Context, error, interface{}) (interface{}, error))
 	case func(context.Context, interface{}):
@@ -496,9 +506,7 @@ func Lift(lifts ...Handler) LiftHandler {
 			panic("Expected handle passed into be a function")
 		}
 
-		var base Handler
-
-		lifts = append(lifts, mh)
+		base := mh
 
 		for i := len(lifts) - 1; i >= 0; i-- {
 			if lifts[i] == nil {
@@ -512,8 +520,6 @@ func Lift(lifts ...Handler) LiftHandler {
 
 			base = WrapHandlers(lifts[i], base)
 		}
-
-		base = WrapHandlers(base, mh)
 
 		return func(ctx context.Context, err error, data interface{}) (interface{}, error) {
 			if base != nil {
@@ -541,9 +547,7 @@ func RLift(handle interface{}) RLiftHandler {
 
 	// We will stack the handlers where one outputs becomes the input of the next.
 	return func(lifts ...Handler) Handler {
-		var base Handler
-
-		lifts = append(lifts, mh)
+		base := mh
 
 		for i := len(lifts) - 1; i >= 0; i-- {
 			if lifts[i] == nil {
