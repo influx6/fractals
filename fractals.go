@@ -21,8 +21,6 @@ var (
 	uType     = reflect.TypeOf((*interface{})(nil)).Elem()
 
 	hlType = reflect.TypeOf((*Handler)(nil)).Elem()
-	dlType = reflect.TypeOf((*DataHandler)(nil)).Elem()
-	elType = reflect.TypeOf((*ErrorHandler)(nil)).Elem()
 
 	dZeroError = reflect.Zero(errorType)
 )
@@ -304,13 +302,13 @@ func IdentityHandler() Handler {
 	}
 }
 
-// DataHandler defines a function type that concentrates on handling only data
+// dataHandler defines a function type that concentrates on handling only data
 // replies alone.
-type DataHandler func(context.Context, interface{}) (interface{}, error)
+type dataHandler func(context.Context, interface{}) (interface{}, error)
 
 // wrapData returns a Handler which wraps a DataHandler within it, but
 // passing forward all errors it receives.
-func wrapData(dh DataHandler) Handler {
+func wrapData(dh dataHandler) Handler {
 	return func(m context.Context, err error, data interface{}) (interface{}, error) {
 		if err != nil {
 			return nil, err
@@ -320,13 +318,13 @@ func wrapData(dh DataHandler) Handler {
 	}
 }
 
-// DataWithNoReturnHandler defines a function type that concentrates on handling only data
+// dataWithNoReturnHandler defines a function type that concentrates on handling only data
 // replies alone.
-type DataWithNoReturnHandler func(context.Context, interface{})
+type dataWithNoReturnHandler func(context.Context, interface{})
 
 // wrapDataWithNoReturn returns a Handler which wraps a DataHandler within it, but
 // passing forward all errors it receives.
-func wrapDataWithNoReturn(dh DataWithNoReturnHandler) Handler {
+func wrapDataWithNoReturn(dh dataWithNoReturnHandler) Handler {
 	return func(m context.Context, err error, data interface{}) (interface{}, error) {
 		if err != nil {
 			return nil, err
@@ -337,13 +335,11 @@ func wrapDataWithNoReturn(dh DataWithNoReturnHandler) Handler {
 	}
 }
 
-// DataWithReturnHandler defines a function type that concentrates on handling only data
-// replies alone.
-type DataWithReturnHandler func(context.Context, interface{}) interface{}
+type dataWithReturnHandler func(context.Context, interface{}) interface{}
 
 // wrapDataWithReturn returns a Handler which wraps a DataHandler within it, but
 // passing forward all errors it receives.
-func wrapDataWithReturn(dh DataWithReturnHandler) Handler {
+func wrapDataWithReturn(dh dataWithReturnHandler) Handler {
 	return func(m context.Context, err error, data interface{}) (interface{}, error) {
 		if err != nil {
 			return nil, err
@@ -355,12 +351,12 @@ func wrapDataWithReturn(dh DataWithReturnHandler) Handler {
 
 // NoDataHandler defines an Handler which allows a return value when called
 // but has no data passed in.
-type NoDataHandler func() interface{}
+type noDataHandler func() interface{}
 
 // wrapNoData returns a Handler which wraps a NoDataHandler within it, but
 // forwards all errors it receives. It calls its internal function
 // with no arguments taking the response and sending that out.
-func wrapNoData(dh NoDataHandler) Handler {
+func wrapNoData(dh noDataHandler) Handler {
 	return func(m context.Context, err error, data interface{}) (interface{}, error) {
 		if err != nil {
 			return nil, err
@@ -377,11 +373,11 @@ func wrapNoData(dh NoDataHandler) Handler {
 
 // DataOnlyHandler defines a function type that concentrates on handling only data
 // replies alone.
-type DataOnlyHandler func(interface{}) interface{}
+type dataOnlyHandler func(interface{}) interface{}
 
 // wrapDataOnly returns a Handler which wraps a DataOnlyHandler within it, but
 // passing forward all errors it receives.
-func wrapDataOnly(dh DataOnlyHandler) Handler {
+func wrapDataOnly(dh dataOnlyHandler) Handler {
 	return func(m context.Context, err error, data interface{}) (interface{}, error) {
 		if err != nil {
 			return nil, err
@@ -397,10 +393,10 @@ func wrapDataOnly(dh DataOnlyHandler) Handler {
 }
 
 // JustDataHandler defines a function type which expects one argument.
-type JustDataHandler func(interface{})
+type justDataHandler func(interface{})
 
 // wrapJustData wraps a JustDataHandler and returns it as a Handler.
-func wrapJustData(dh JustDataHandler) Handler {
+func wrapJustData(dh justDataHandler) Handler {
 	return func(ctx context.Context, err error, d interface{}) (interface{}, error) {
 		if err != nil {
 			return nil, err
@@ -411,13 +407,11 @@ func wrapJustData(dh JustDataHandler) Handler {
 	}
 }
 
-// JustErrorHandler defines a function type that concentrates on handling only
-// errors alone.
-type JustErrorHandler func(error)
+type justErrorHandler func(error)
 
 // wrapJustError returns a Handler which wraps a DataOnlyHandler within it, but
 // passing forward all errors it receives.
-func wrapJustError(dh JustErrorHandler) Handler {
+func wrapJustError(dh justErrorHandler) Handler {
 	return func(ctx context.Context, err error, d interface{}) (interface{}, error) {
 		if err != nil {
 			dh(err)
@@ -428,13 +422,11 @@ func wrapJustError(dh JustErrorHandler) Handler {
 	}
 }
 
-// ErrorReturnHandler defines a function type that concentrates on handling only data
-// errors alone.
-type ErrorReturnHandler func(error) error
+type errorReturnHandler func(error) error
 
 // wrapErrorReturn returns a Handler which wraps a DataOnlyHandler within it, but
 // passing forward all errors it receives.
-func wrapErrorReturn(dh ErrorReturnHandler) Handler {
+func wrapErrorReturn(dh errorReturnHandler) Handler {
 	return func(ctx context.Context, err error, d interface{}) (interface{}, error) {
 		if err != nil {
 			return nil, dh(err)
@@ -444,13 +436,11 @@ func wrapErrorReturn(dh ErrorReturnHandler) Handler {
 	}
 }
 
-// ErrorHandler defines a function type that concentrates on handling only data
-// errors alone.
-type ErrorHandler func(context.Context, error) (interface{}, error)
+type errorHandler func(context.Context, error) (interface{}, error)
 
 // wrapError returns a Handler which wraps a DataOnlyHandler within it, but
 // passing forward all errors it receives.
-func wrapError(dh ErrorHandler) Handler {
+func wrapError(dh errorHandler) Handler {
 	return func(m context.Context, err error, data interface{}) (interface{}, error) {
 		if err != nil {
 			return dh(m, err)
@@ -460,13 +450,13 @@ func wrapError(dh ErrorHandler) Handler {
 	}
 }
 
-// ErrorOnlyHandler defines a function type that concentrates on handling only error
+// errorOnlyHandler defines a function type that concentrates on handling only error
 // replies alone.
-type ErrorOnlyHandler func(interface{}) error
+type errorOnlyHandler func(interface{}) error
 
 // wrapErrorOnly returns a Handler which wraps a ErrorOnlyHandler within it, but
 // passing forward all errors it receives.
-func wrapErrorOnly(dh ErrorOnlyHandler) Handler {
+func wrapErrorOnly(dh errorOnlyHandler) Handler {
 	return func(m context.Context, err error, data interface{}) (interface{}, error) {
 		if err != nil {
 			return nil, dh(data)
