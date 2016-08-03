@@ -163,8 +163,16 @@ func Wrap(node interface{}) Handler {
 			data = args[2]
 			dZero = reflect.Zero(data)
 			useData = true
+            
+           if !useContext || !useData || !useErr {
+             return nil
+           }
 		}
-
+        
+        if !useData && !useErr {
+             return nil
+        }
+        
 		hl = func(ctx context.Context, err error, val interface{}) (interface{}, error) {
 			var fnArgs []reflect.Value
 			var resArgs []reflect.Value
@@ -761,27 +769,6 @@ func WrapStreamHandler(h interface{}) StreamHandler {
 		return h.(func(context.Context, interface{}, bool) interface{})
 
 	default:
-		hs := Wrap(h)
-		if hs != nil {
-			return func(ctx context.Context, data interface{}, end bool) interface{} {
-				if ed, ok := data.(error); ok {
-					res, err := hs(ctx, ed, nil)
-					if err != nil {
-						return err
-					}
-
-					return res
-				}
-
-				res, err := hs(ctx, nil, data)
-				if err != nil {
-					return err
-				}
-
-				return res
-			}
-		}
-
 		if !reflection.IsFuncType(h) {
 			return nil
 		}
@@ -864,7 +851,7 @@ func WrapStreamHandler(h interface{}) StreamHandler {
 			if !useContext && !useData && !useBool {
 				resArgs = tm.Call(nil)
 			} else {
-
+                
 				// If data does not match then skip this fall.
 				if breakOfData && len(fnArgs) < 1 {
 					return nil
@@ -872,7 +859,7 @@ func WrapStreamHandler(h interface{}) StreamHandler {
 
 				if !breakOfData {
 					if useContext && useBool && useData {
-						fnArgs = []reflect.Value{mctx, me, md}
+						fnArgs = []reflect.Value{mctx, md,me}
 					}
 
 					if useContext && !useBool && useData {
@@ -880,7 +867,7 @@ func WrapStreamHandler(h interface{}) StreamHandler {
 					}
 
 					if !useContext && useData && useBool {
-						fnArgs = []reflect.Value{me, md}
+						fnArgs = []reflect.Value{md, me}
 					}
 
 					if !useContext && useData && !useBool {
@@ -892,7 +879,7 @@ func WrapStreamHandler(h interface{}) StreamHandler {
 			}
 
 			resLen := len(resArgs)
-			if resLen < 0 {
+			if resLen < 1 {
 				return nil
 			}
 

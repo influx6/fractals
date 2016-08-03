@@ -60,12 +60,12 @@ func TestBasicFn(t *testing.T) {
 }
 
 func TestBasicStream(t *testing.T) {
-	sm := fractals.MustStream(func(ctx context.Context, number int, done bool) (int, error) {
+	sm := fractals.MustStream(func(ctx context.Context, number int, done bool) int {
 		if done {
-			return number * 400, nil
+			return number * 400
 		}
 
-		return number * 200, nil
+		return number * 200
 	})
 
 	dl := sm.Emit(context.New(), 4, false)
