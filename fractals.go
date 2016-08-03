@@ -8,7 +8,6 @@ package fractals
 import (
 	"fmt"
 	"reflect"
-	"sync"
 
 	"github.com/influx6/faux/context"
 	"github.com/influx6/faux/reflection"
@@ -17,12 +16,12 @@ import (
 
 var (
 	errorType = reflect.TypeOf((*error)(nil)).Elem()
+	boolType  = reflect.TypeOf((*bool)(nil)).Elem()
 	ctxType   = reflect.TypeOf((*context.Context)(nil)).Elem()
 	uType     = reflect.TypeOf((*interface{})(nil)).Elem()
 
-	hlType = reflect.TypeOf((*Handler)(nil)).Elem()
-
 	dZeroError = reflect.Zero(errorType)
+	dZeroBool  = reflect.Zero(boolType)
 )
 
 //==============================================================================
@@ -731,95 +730,234 @@ func RCollect(handle interface{}) RLiftHandler {
 
 //==============================================================================
 
-// Pipeline defines a interface which exposes a stream like pipe which consistently
-// delivers values to subscribers when executed.
-type Pipeline interface {
-	Exec(context.Context, error, interface{}) (interface{}, error)
-	Run(context.Context, interface{}) (interface{}, error)
-	Flow(Handler) Pipeline
-	WithClose(func(context.Context)) Pipeline
-	End(context.Context)
+// StreamHandler defines a function type which requires a context, data and
+// a bool value to indicate if the data is the last item in the stream, meaning
+// the stream has ended.
+type StreamHandler func(context.Context, interface{}, bool) interface{}
+
+// WrapStreamHandler wraps a handler returning a StreamHandler.
+func WrapStreamHandler(h interface{}) StreamHandler {
+	switch h.(type) {
+	case func(context.Context, error, interface{}) (interface{}, error):
+		return func(ctx context.Context, data interface{}, end bool) interface{} {
+			if ed, ok := data.(error); ok {
+				res, err := (h.(func(context.Context, error, interface{}) (interface{}, error)))(ctx, ed, nil)
+				if err != nil {
+					return err
+				}
+
+				return res
+			}
+
+			res, err := (h.(func(context.Context, error, interface{}) (interface{}, error)))(ctx, nil, data)
+			if err != nil {
+				return err
+			}
+
+			return res
+		}
+
+	case func(context.Context, interface{}, bool) interface{}:
+		return h.(func(context.Context, interface{}, bool) interface{})
+
+	default:
+		hs := Wrap(h)
+		if hs != nil {
+			return func(ctx context.Context, data interface{}, end bool) interface{} {
+				if ed, ok := data.(error); ok {
+					res, err := hs(ctx, ed, nil)
+					if err != nil {
+						return err
+					}
+
+					return res
+				}
+
+				res, err := hs(ctx, nil, data)
+				if err != nil {
+					return err
+				}
+
+				return res
+			}
+		}
+
+		if !reflection.IsFuncType(h) {
+			return nil
+		}
+
+		tm, _ := reflection.FuncValue(h)
+		args, _ := reflection.GetFuncArgumentsType(h)
+
+		dLen := len(args)
+
+		var data reflect.Type
+		var dZero reflect.Value
+
+		var useContext bool
+		var useBool bool
+		var useData bool
+		// var isCustom bool
+
+		// Check if this first item is a context.Context type.
+		if dLen < 2 {
+			useContext, _ = reflection.CanSetForType(ctxType, args[0])
+			useBool, _ = reflection.CanSetForType(boolType, args[0])
+
+			if !useBool {
+				data = args[0]
+				dZero = reflect.Zero(data)
+				useData = true
+				// isCustom = true
+			}
+		}
+
+		if dLen == 2 {
+			useContext, _ = reflection.CanSetForType(ctxType, args[0])
+			useBool, _ = reflection.CanSetForType(boolType, args[1])
+
+			if !useBool {
+				data = args[1]
+				dZero = reflect.Zero(data)
+				useData = true
+				// isCustom = true
+			}
+		}
+
+		if dLen > 2 {
+			useContext, _ = reflection.CanSetForType(ctxType, args[0])
+			useBool, _ = reflection.CanSetForType(boolType, args[2])
+
+			data = args[1]
+			dZero = reflect.Zero(data)
+			useData = true
+		}
+
+		return func(ctx context.Context, val interface{}, done bool) interface{} {
+			var fnArgs []reflect.Value
+			var resArgs []reflect.Value
+
+			var mctx reflect.Value
+
+			me := reflect.ValueOf(done)
+			md := dZero
+
+			if useContext {
+				mctx = reflect.ValueOf(ctx)
+			}
+
+			// Flag to skip function if data does not match.
+			breakOfData := true
+
+			if val != nil && useData {
+				ok, convertData := reflection.CanSetForType(data, reflect.TypeOf(val))
+				if ok {
+					breakOfData = false
+					md = reflect.ValueOf(val)
+
+					if convertData {
+						md = md.Convert(data)
+					}
+				}
+			}
+
+			if !useContext && !useData && !useBool {
+				resArgs = tm.Call(nil)
+			} else {
+
+				// If data does not match then skip this fall.
+				if breakOfData && len(fnArgs) < 1 {
+					return nil
+				}
+
+				if !breakOfData {
+					if useContext && useBool && useData {
+						fnArgs = []reflect.Value{mctx, me, md}
+					}
+
+					if useContext && !useBool && useData {
+						fnArgs = []reflect.Value{mctx, md}
+					}
+
+					if !useContext && useData && useBool {
+						fnArgs = []reflect.Value{me, md}
+					}
+
+					if !useContext && useData && !useBool {
+						fnArgs = []reflect.Value{md}
+					}
+				}
+
+				resArgs = tm.Call(fnArgs)
+			}
+
+			resLen := len(resArgs)
+			if resLen < 0 {
+				return nil
+			}
+
+			return resArgs[0].Interface()
+		}
+	}
 }
 
-// New returns a new instance of structure that matches the Pipeline interface.
-func New(main Handler) Pipeline {
-	p := pipeline{
-		main: main,
+// Stream defines a interface which exposes a stream that allows continous
+// data to be send down the pipeline.
+type Stream interface {
+	Emit(context.Context, interface{}, bool) interface{}
+	Stream(interface{}) Stream
+}
+
+// MustSteram returns a new Stream using the handler it receives.
+func MustStream(handler interface{}) Stream {
+	hs := WrapStreamHandler(handler)
+	if hs == nil {
+		panic("Argument is not a StreamHandler")
 	}
 
-	return &p
+	var sm stream
+	sm.main = hs
+	return &sm
 }
 
-type pipeline struct {
-	main   Handler
-	lw     sync.RWMutex
-	lines  []Handler
-	closer []func(context.Context)
+type stream struct {
+	main StreamHandler
+	next Stream
 }
 
-// End calls the close subscription and applies the context.
-func (p *pipeline) End(ctx context.Context) {
-	p.lw.RLock()
-	for _, sub := range p.closer {
-		sub(ctx)
-	}
-	p.lw.RUnlock()
-}
-
-// WithClose adds a function into the close notification lines for the pipeline.
-// Returns itself for chaining.
-func (p *pipeline) WithClose(h func(context.Context)) Pipeline {
-	p.lw.RLock()
-	p.closer = append(p.closer, h)
-	p.lw.RUnlock()
-	return p
-}
-
-// Flow connects another handler into the subscription list of this pipeline.
-// It returns itself to allow chaining.
-func (p *pipeline) Flow(h Handler) Pipeline {
-	p.lw.RLock()
-	p.lines = append(p.lines, h)
-	p.lw.RUnlock()
-	return p
-}
-
-// Run takes a context and val which it applies appropriately to the internal
-// handler for the pipeline and applies the result to its subscribers.
-func (p *pipeline) Run(ctx context.Context, val interface{}) (interface{}, error) {
-	var res interface{}
-	var err error
-
-	if eval, ok := val.(error); ok {
-		res, err = p.main(ctx, eval, nil)
-	} else {
-		res, err = p.main(ctx, nil, val)
+// Emit calls the next handler in the stream connection.
+func (s *stream) Emit(ctx context.Context, data interface{}, end bool) interface{} {
+	res := s.main(ctx, data, end)
+	if s.next != nil {
+		return s.next.Emit(ctx, res, end)
 	}
 
-	p.lw.RLock()
-	for _, sub := range p.lines {
-		sub(ctx, err, res)
+	if edata, ok := res.(error); ok {
+		return edata
 	}
-	p.lw.RUnlock()
 
-	return res, err
+	return res
 }
 
-// Run takes a context, error and val which it applies appropriately to the internal
-// handler for the pipeline and applies the result to its subscribers.
-func (p *pipeline) Exec(ctx context.Context, er error, val interface{}) (interface{}, error) {
-	res, err := p.main(ctx, er, val)
+// Stream returns a new Stream with the provided Handler.
+func (s *stream) Stream(h interface{}) Stream {
+	var sm Stream
 
-	p.lw.RLock()
-	for _, sub := range p.lines {
-		sub(ctx, err, res)
+	switch h.(type) {
+	case Stream:
+		sm = h.(Stream)
+	default:
+		sm = MustStream(h)
 	}
-	p.lw.RUnlock()
 
-	return res, err
+	if s.next != nil {
+		return s.next.Stream(sm)
+	}
+
+	return sm
 }
 
-//===================================================================================
+//==============================================================================
 
 var hl = regos.New()
 

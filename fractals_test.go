@@ -59,6 +59,28 @@ func TestBasicFn(t *testing.T) {
 	logPassed(t, "Total processed values was with count %d", count)
 }
 
+func TestBasicStream(t *testing.T) {
+	sm := fractals.MustStream(func(ctx context.Context, number int, done bool) (int, error) {
+		if done {
+			return number * 400, nil
+		}
+
+		return number * 200, nil
+	})
+
+	dl := sm.Emit(context.New(), 4, false)
+	if dll, ok := dl.(int); !ok || dll != 800 {
+		fatalFailed(t, "Should have recieved 800 but got %d", dll)
+	}
+	logPassed(t, "Should have recieved 800")
+
+	dl = sm.Emit(context.New(), 4, true)
+	if dll, ok := dl.(int); !ok || dll != 1600 {
+		fatalFailed(t, "Should have recieved 1600 but got %d", dll)
+	}
+	logPassed(t, "Should have recieved 1600")
+}
+
 // TestAutoFn  validates the use of reflection with giving types to test use of
 // the form in fractals.
 func TestAutoFn(t *testing.T) {
