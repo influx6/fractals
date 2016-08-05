@@ -75,8 +75,8 @@ func WrapMiddleware(handlers ...fractals.Handler) DriveMiddleware {
 	}
 }
 
-// HTTPDrive defines a structure for providing a global router using the
-// httptreemux.Tree router.
+// HTTPDrive defines a structure for providing a global httprouter by using the
+// httptreemux.Tree underneath.
 type HTTPDrive struct {
 	*httptreemux.TreeMux
 	globalMW DriveMiddleware // global middleware.
@@ -84,12 +84,12 @@ type HTTPDrive struct {
 
 // Serve lunches the drive with a http server.
 func (hd *HTTPDrive) Serve(addr string) {
-	LaunchHTTP(addr, hd.router)
+	LaunchHTTP(addr, hd)
 }
 
 // ServeTLS lunches the drive with a http server.
 func (hd *HTTPDrive) ServeTLS(addr string, certFile string, keyFile string) {
-	LaunchHTTPS(addr, certFile, keyFile, hd.router)
+	LaunchHTTPS(addr, certFile, keyFile, hd)
 }
 
 // NewHTTPDrive returns a new instance of the HTTPDrive struct.
@@ -135,10 +135,25 @@ func (e Endpoint) handlerFunc(globalWM DriveMiddleware) func(w http.ResponseWrit
 	var localWM DriveMiddleware
 
 	switch e.LocalMW.(type) {
+	case func(context.Context, error, interface{}) (interface{}, error):
+		localWM = WrapMiddleware(e.LocalMW.(func(context.Context, error, interface{}) (interface{}, error)))
+	case []func(context.Context, error, interface{}) (interface{}, error):
+		fm := e.LocalMW.([]fractals.Handler)
+		localWM = WrapMiddleware(fm...)
+	case func(interface{}) fractals.Handler:
+		localWM = WrapMiddleware(e.LocalMW.(func(interface{}) fractals.Handler)(fractals.IdentityHandler()))
+	case func(context.Context, *Request) error:
+		elx := e.LocalMW.(func(context.Context, *Request) error)
+		localWM = func(ctx context.Context, rw *Request) (*Request, error) {
+			if err := elx(ctx, rw); err != nil {
+				return nil, err
+			}
 
+			return rw, nil
+		}
+	case func(ctx context.Context, rw *Request) (*Request, error):
+		localWM = e.LocalMW.(func(ctx context.Context, rw *Request) (*Request, error))
 	}
-
-	localMW := e.LocalMW(fractals.IdentityHandler())
 
 	return func(w http.ResponseWriter, r *http.Request, params map[string]string) {
 		ctx := context.New()
@@ -158,16 +173,33 @@ func (e Endpoint) handlerFunc(globalWM DriveMiddleware) func(w http.ResponseWrit
 			RenderResponseError(err, rw)
 		}
 
+		// Run local middleware second and receive its return values.
+		if localWM != nil {
+			rw, err = localWM(ctx, rw)
+		}
+
+		if err != nil && !rw.Res.DataWritten() {
+			RenderResponseError(err, rw)
+		}
+
 		if err := action(ctx, rw); err != nil && !rw.Res.DataWritten() {
 			RenderResponseError(err, rw)
 		}
 	}
 }
 
-// Route returns a function which registers all
+// Route returns a functional register, which uses the same drive for registring
+// http endpoints.
 func Route(drive *HTTPDrive) func(Endpoint) error {
 	return func(end Endpoint) error {
-		drive.router.Handle(end.Method, end.Path, end.HandlerFunc())
+		drive.Handle(end.Method, end.Path, end.handlerFunc(drive.globalMW))
 		return nil
 	}
+}
+
+// RouteBy provides a more direct function that lets you specify the drive and
+// endpoint directly.
+func RouteBy(drive *HTTPDrive, end Endpoint) error {
+	drive.Handle(end.Method, end.Path, end.handlerFunc(drive.globalMW))
+	return nil
 }
