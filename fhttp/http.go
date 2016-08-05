@@ -83,16 +83,16 @@ func Headers(h map[string]string) fractals.Handler {
 	})
 }
 
-// WrapMW returns a new http.HandlerFunc for recieving http request.
-func WrapMW(handler fractals.Handler) func(http.ResponseWriter, *http.Request, map[string]string) {
-	return WrapMWWith(context.New(), handler)
+// WrapTreeHandler returns a new http.HandlerFunc for recieving http request.
+func WrapTreeHandler(handler fractals.Handler) func(http.ResponseWriter, *http.Request, map[string]string) {
+	return WrapTreeHandlerWith(context.New(), handler)
 }
 
-// WrapMWWith returns a http.HandlerFunc which accepts an extra parameter and
+// WrapTreeHandlerWith returns a http.HandlerFunc which accepts an extra parameter and
 // passes the request objects to the handler. If no response was sent when
 // the handlers are runned and an error came back then we write the error
 // as response.
-func WrapMWWith(ctx context.Context, handler fractals.Handler) func(http.ResponseWriter, *http.Request, map[string]string) {
+func WrapTreeHandlerWith(ctx context.Context, handler fractals.Handler) func(http.ResponseWriter, *http.Request, map[string]string) {
 	return func(w http.ResponseWriter, r *http.Request, params map[string]string) {
 		rw := &Request{
 			Params: Param(params),
