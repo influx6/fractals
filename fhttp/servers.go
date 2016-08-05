@@ -14,6 +14,40 @@ import (
 // returning the request or an error.
 type DriveMiddleware func(context.Context, *Request) (*Request, error)
 
+// WrapMW returns a new handler where the first wraps the second with its returned
+// values.
+func WrapMW(h1, h2 DriveMiddleware) DriveMiddleware {
+	return func(ctx context.Context, rw *Request) (*Request, error) {
+		m1, e1 := h1(ctx, rw)
+		if e1 != nil {
+			return nil, e1
+		}
+
+		return h2(ctx, m1)
+	}
+}
+
+// LiftWM wraps a series of DriveMiddleware and returns a DriveMiddleware where
+// each feeds its returns as the input of the next.
+func LiftWM(mws ...DriveMiddleware) DriveMiddleware {
+	var base DriveMiddleware
+
+	for i := len(mws) - 1; i >= 0; i-- {
+		if mws[i] == nil {
+			continue
+		}
+
+		if base == nil {
+			base = mws[i]
+			continue
+		}
+
+		base = WrapMW(mws[i], base)
+	}
+
+	return base
+}
+
 // WrapMiddleware wraps a Handler or lifted Handler from the slices of Handlers
 // which when runned must return either a (*Request, io.WriteTo, io.Reader,[]byte),
 // if it matches others except a *Request, then their contents will be written to
@@ -92,11 +126,11 @@ func (hd *HTTPDrive) ServeTLS(addr string, certFile string, keyFile string) {
 	LaunchHTTPS(addr, certFile, keyFile, hd)
 }
 
-// NewHTTPDrive returns a new instance of the HTTPDrive struct.
-func NewHTTPDrive(handlers ...fractals.Handler) *HTTPDrive {
+// NewHTTP returns a new instance of the HTTPDrive struct.
+func NewHTTP(handlers ...DriveMiddleware) *HTTPDrive {
 	var drive HTTPDrive
 	drive.TreeMux = httptreemux.New()
-	drive.globalMW = WrapMiddleware(handlers...)
+	drive.globalMW = LiftWM(handlers...)
 	return &drive
 }
 
@@ -153,6 +187,9 @@ func (e Endpoint) handlerFunc(globalWM DriveMiddleware) func(w http.ResponseWrit
 		}
 	case func(ctx context.Context, rw *Request) (*Request, error):
 		localWM = e.LocalMW.(func(ctx context.Context, rw *Request) (*Request, error))
+	default:
+		mw := fractals.MustWrap(e.LocalMW)
+		localWM = WrapMiddleware(mw)
 	}
 
 	return func(w http.ResponseWriter, r *http.Request, params map[string]string) {
