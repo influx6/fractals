@@ -81,6 +81,32 @@ func TestBasicStream(t *testing.T) {
 	logPassed(t, "Should have recieved 1600")
 }
 
+func TestSubLift(t *testing.T) {
+	pos := fractals.RLift(func(r context.Context, number int) int {
+		return number * 2
+	})()
+
+	pos2 := fractals.RLift(func(r context.Context, number int) int {
+		return number * 4
+	})()
+
+	pos3 := fractals.RLift(func(r context.Context, number int) int {
+		return number / 3
+	})()
+
+	handler := fractals.SubLift(func(n, m int) int {
+		return n * m
+	}, pos, pos2, pos3)
+
+	ctx := context.New()
+	res, _ := handler(ctx, nil, 2)
+
+	if dl := res.(int); dl != 20 {
+		fatalFailed(t, "Should have recieved %d but got %d", 20, res)
+	}
+	logPassed(t, "Should have recieved %d but got %d", 20, res)
+}
+
 // TestAutoFn  validates the use of reflection with giving types to test use of
 // the form in fractals.
 func TestAutoFn(t *testing.T) {

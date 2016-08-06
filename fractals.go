@@ -6,6 +6,7 @@
 package fractals
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -163,16 +164,16 @@ func Wrap(node interface{}) Handler {
 			data = args[2]
 			dZero = reflect.Zero(data)
 			useData = true
-            
-           if !useContext || !useData || !useErr {
-             return nil
-           }
+
+			if !useContext || !useData || !useErr {
+				return nil
+			}
 		}
-        
-        if !useData && !useErr {
-             return nil
-        }
-        
+
+		if !useData && !useErr {
+			return nil
+		}
+
 		hl = func(ctx context.Context, err error, val interface{}) (interface{}, error) {
 			var fnArgs []reflect.Value
 			var resArgs []reflect.Value
@@ -486,6 +487,252 @@ func WrapHandlers(h1 Handler, h2 Handler) Handler {
 
 //==============================================================================
 
+// SubApplier provides a function type that takes two values which then returns
+// a response and error based on its internal operations.
+type SubApplier func(context.Context, interface{}, interface{}) (interface{}, error)
+
+// ReturnApplier takes a boolean value which dictates if it will return it's
+// first argument or its second. You can use it to replay either arguments as
+// end results.
+func ReturnApplier(firstArg bool) SubApplier {
+	return func(_ context.Context, dl interface{}, rl interface{}) (interface{}, error) {
+		if firstArg {
+			return dl, nil
+		}
+		return rl, nil
+	}
+}
+
+// MustMagicApplier returns the SubApplier if the handle matches the requirements
+// else panics.
+func MustMagicApplier(handle interface{}) SubApplier {
+	ap := MagicApplier(handle)
+	if ap == nil {
+		panic("Expected handle passed into be a function and must accept two arguments")
+	}
+
+	return ap
+}
+
+// MagicApplier wraps the function type recieved applying any magic for the
+// expected types, returning a SubApplier to call the functions as needed.
+func MagicApplier(handle interface{}) SubApplier {
+	switch handle.(type) {
+	case func(context.Context, interface{}, interface{}) (interface{}, error):
+		return handle.(func(context.Context, interface{}, interface{}) (interface{}, error))
+	case func(interface{}, interface{}) (interface{}, error):
+		hl := handle.(func(interface{}, interface{}) (interface{}, error))
+		return func(_ context.Context, d1 interface{}, d2 interface{}) (interface{}, error) {
+			return hl(d1, d2)
+		}
+	default:
+		if !reflection.IsFuncType(handle) {
+			return nil
+		}
+
+		tm, _ := reflection.FuncValue(handle)
+		args, _ := reflection.GetFuncArgumentsType(handle)
+
+		dLen := len(args)
+		if dLen < 2 {
+			return nil
+		}
+
+		var useContext bool
+		var useOne bool
+
+		var d1 reflect.Type
+		var d2 reflect.Type
+
+		var d1Zero reflect.Value
+		var d2Zero reflect.Value
+
+		if dLen == 2 {
+			useContext, _ = reflection.CanSetForType(ctxType, args[0])
+			if useContext {
+				d1 = args[1]
+				d1Zero = reflect.Zero(d1)
+				useOne = true
+			} else {
+				d1 = args[0]
+				d1Zero = reflect.Zero(d1)
+
+				d2 = args[1]
+				d2Zero = reflect.Zero(d2)
+			}
+		}
+
+		if dLen > 2 {
+			useContext, _ = reflection.CanSetForType(ctxType, args[0])
+			if !useContext {
+				return nil
+			}
+
+			d1 = args[0]
+			d1Zero = reflect.Zero(d1)
+
+			d2 = args[1]
+			d2Zero = reflect.Zero(d2)
+		}
+
+		return func(ctx context.Context, dl interface{}, rl interface{}) (interface{}, error) {
+			var fnArgs []reflect.Value
+			var resArgs []reflect.Value
+
+			if useContext {
+				fnArgs = append(fnArgs, reflect.ValueOf(ctx))
+			}
+
+			var dv1 reflect.Value
+			var dv2 reflect.Value
+
+			if dl != nil {
+				dv1 = reflect.ValueOf(dl)
+			} else {
+				dv1 = d1Zero
+			}
+
+			if rl != nil {
+				dv2 = reflect.ValueOf(rl)
+			} else {
+				dv2 = d2Zero
+			}
+
+			if !useOne {
+				can, convert := reflection.CanSetFor(d1, dv1)
+				if !can {
+					return nil, errors.New("Invalid Type Recieved")
+				}
+
+				can2, convert2 := reflection.CanSetFor(d2, dv2)
+				if !can2 {
+					return nil, errors.New("Invalid Type Recieved")
+				}
+
+				if convert {
+					dv1 = dv1.Convert(d1)
+				}
+
+				if convert2 {
+					dv2 = dv2.Convert(d2)
+				}
+
+				fnArgs = append(fnArgs, dv1, dv2)
+				resArgs = tm.Call(fnArgs)
+				resLen := len(resArgs)
+
+				// If it has no return, by logic, this is a secondary lift, hence
+				// return the first argument.
+				if resLen < 1 {
+					return dl, nil
+				}
+
+				if resLen < 2 {
+					rOnly := resArgs[0]
+					if erErr, ok := rOnly.Interface().(error); ok {
+						return nil, erErr
+					}
+
+					return rOnly.Interface(), nil
+				}
+
+				rData := resArgs[0].Interface()
+				rErr := resArgs[1].Interface()
+
+				if erErr, ok := rErr.(error); ok {
+					return rData, erErr
+				}
+
+				return rData, nil
+			}
+
+			var useFirst bool
+
+			can, convert := reflection.CanSetFor(d1, dv1)
+			if can {
+				useFirst = true
+
+				if convert {
+					dv1 = dv1.Convert(d1)
+				}
+
+				if useFirst {
+					fnArgs = append(fnArgs, dv1)
+				}
+			}
+
+			if !useFirst {
+				can, convert = reflection.CanSetFor(d2, dv2)
+				if !can {
+					return nil, errors.New("Invalid Type Recieved")
+				}
+
+				if can && convert {
+					dv2 = dv2.Convert(d2)
+				}
+
+				fnArgs = append(fnArgs, dv2)
+			}
+
+			resArgs = tm.Call(fnArgs)
+			resLen := len(resArgs)
+
+			// If it has no return, by logic, this is a secondary lift, hence
+			// return the first argument.
+			if resLen < 1 {
+				return dl, nil
+			}
+
+			if resLen < 2 {
+				rOnly := resArgs[0]
+				if erErr, ok := rOnly.Interface().(error); ok {
+					return nil, erErr
+				}
+
+				return rOnly.Interface(), nil
+			}
+
+			rData := resArgs[0].Interface()
+			rErr := resArgs[1].Interface()
+
+			if erErr, ok := rErr.(error); ok {
+				return rData, erErr
+			}
+
+			return rData, nil
+		}
+	}
+}
+
+// SubLift provides a intericate link of combining operations of desimilar
+// behaviour together. This way you can apply the result of a root Handler
+// to a lower series but still by using a third function called the applier
+// can decide on the return value you want.
+func SubLift(applier interface{}, root Handler, lifts ...Handler) Handler {
+	subApply := MustMagicApplier(applier)
+	suLift := Lift(lifts...)(nil)
+
+	return func(ctx context.Context, err error, data interface{}) (interface{}, error) {
+		rootRes, rootErr := root(ctx, err, data)
+
+		// Allow the rootErr to pass into the sublift incase we are dealing with a
+		// error lift processor.
+		liftRes, liftErr := suLift(ctx, rootErr, rootRes)
+		if liftErr != nil {
+			return nil, liftErr
+		}
+
+		return subApply(ctx, rootRes, liftRes)
+	}
+}
+
+// SubLiftReplay takes a root Handler, applier the arguments it recievies, then
+// applies specific operations to the lifts sets but returns the return value of
+// the root Handler.
+func SubLiftReplay(root Handler, lifts ...Handler) Handler {
+	return SubLift(ReturnApplier(true), root, lifts...)
+}
+
 // LiftHandler defines a type that takes a interface which must be a function
 // and wraps it inside a Handler, returning that Handler.
 type LiftHandler func(interface{}) Handler
@@ -498,9 +745,15 @@ func Lift(lifts ...Handler) LiftHandler {
 
 	// We will stack the handlers where one outputs becomes the input of the next.
 	return func(handle interface{}) Handler {
-		mh := Wrap(handle)
-		if mh == nil {
-			panic("Expected handle passed into be a function")
+		var mh Handler
+
+		if handle != nil {
+			mh = Wrap(handle)
+			if mh == nil {
+				panic("Expected handle passed into be a function")
+			}
+		} else {
+			mh = IdentityHandler()
 		}
 
 		base := mh
@@ -575,9 +828,15 @@ func Distribute(lifts ...Handler) LiftHandler {
 
 	// We will stack the handlers where one outputs becomes the input of the next.
 	return func(handle interface{}) Handler {
-		mh := Wrap(handle)
-		if mh == nil {
-			panic("Expected handle passed into be a function")
+		var mh Handler
+
+		if handle != nil {
+			mh = Wrap(handle)
+			if mh == nil {
+				panic("Expected handle passed into be a function")
+			}
+		} else {
+			mh = IdentityHandler()
 		}
 
 		return func(ctx context.Context, err error, data interface{}) (interface{}, error) {
@@ -627,9 +886,15 @@ func DistributeButPack(lifts ...Handler) LiftHandler {
 
 	// We will stack the handlers where one outputs becomes the input of the next.
 	return func(handle interface{}) Handler {
-		mh := Wrap(handle)
-		if mh == nil {
-			panic("Expected handle passed into be a function")
+		var mh Handler
+
+		if handle != nil {
+			mh = Wrap(handle)
+			if mh == nil {
+				panic("Expected handle passed into be a function")
+			}
+		} else {
+			mh = IdentityHandler()
 		}
 
 		return func(ctx context.Context, err error, data interface{}) (interface{}, error) {
@@ -686,9 +951,15 @@ func Collect(lifts ...Handler) LiftHandler {
 
 	// We will stack the handlers where one outputs becomes the input of the next.
 	return func(handle interface{}) Handler {
-		mh := Wrap(handle)
-		if mh == nil {
-			panic("Expected handle passed into be a function")
+		var mh Handler
+
+		if handle != nil {
+			mh = Wrap(handle)
+			if mh == nil {
+				panic("Expected handle passed into be a function")
+			}
+		} else {
+			mh = IdentityHandler()
 		}
 
 		return func(ctx context.Context, err error, data interface{}) (interface{}, error) {
@@ -851,7 +1122,7 @@ func WrapStreamHandler(h interface{}) StreamHandler {
 			if !useContext && !useData && !useBool {
 				resArgs = tm.Call(nil)
 			} else {
-                
+
 				// If data does not match then skip this fall.
 				if breakOfData && len(fnArgs) < 1 {
 					return nil
@@ -859,7 +1130,7 @@ func WrapStreamHandler(h interface{}) StreamHandler {
 
 				if !breakOfData {
 					if useContext && useBool && useData {
-						fnArgs = []reflect.Value{mctx, md,me}
+						fnArgs = []reflect.Value{mctx, md, me}
 					}
 
 					if useContext && !useBool && useData {
