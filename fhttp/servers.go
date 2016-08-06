@@ -21,6 +21,12 @@ func IdentityMiddleware() func(context.Context, *Request) (*Request, error) {
 	}
 }
 
+// IdentityMiddlewareHandler returns the IdentityMiddleware returned value
+// as a fractals.Handler.
+func IdentityMiddlewareHandler() fractals.Handler {
+	return fractals.MustWrap(IdentityMiddleware())
+}
+
 // WrapMW returns a new handler where the first wraps the second with its returned
 // values.
 func WrapMW(h1, h2 DriveMiddleware) DriveMiddleware {
