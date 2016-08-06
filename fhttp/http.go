@@ -83,30 +83,6 @@ func Headers(h map[string]string) fractals.Handler {
 	})
 }
 
-// WrapTreeHandler returns a new http.HandlerFunc for recieving http request.
-func WrapTreeHandler(handler fractals.Handler) func(http.ResponseWriter, *http.Request, map[string]string) {
-	return WrapTreeHandlerWith(context.New(), handler)
-}
-
-// WrapTreeHandlerWith returns a http.HandlerFunc which accepts an extra parameter and
-// passes the request objects to the handler. If no response was sent when
-// the handlers are runned and an error came back then we write the error
-// as response.
-func WrapTreeHandlerWith(ctx context.Context, handler fractals.Handler) func(http.ResponseWriter, *http.Request, map[string]string) {
-	return func(w http.ResponseWriter, r *http.Request, params map[string]string) {
-		rw := &Request{
-			Params: Param(params),
-			Res:    NewResponseWriter(w),
-			Req:    r,
-		}
-
-		_, err := handler(ctx, nil, rw)
-		if err != nil && !rw.Res.DataWritten() {
-			RenderResponseError(err, rw)
-		}
-	}
-}
-
 // LaunchHTTP lunches a http server, setting up the signal handler needed.
 func LaunchHTTP(addr string, mux http.Handler) {
 	go func() {

@@ -10,6 +10,39 @@ import (
 	"github.com/influx6/fractals"
 )
 
+// WrapFractalHandler returns a new http.HandlerFunc for recieving http request.
+func WrapFractalHandler(handler fractals.Handler) func(http.ResponseWriter, *http.Request, map[string]string) {
+	return WrapFractalHandlerWith(context.New(), handler)
+}
+
+// WrapFractalHandlerWith returns a http.HandlerFunc which accepts an extra parameter and
+// passes the request objects to the handler. If no response was sent when
+// the handlers are runned and an error came back then we write the error
+// as response.
+func WrapFractalHandlerWith(ctx context.Context, handler fractals.Handler) func(http.ResponseWriter, *http.Request, map[string]string) {
+	return func(w http.ResponseWriter, r *http.Request, params map[string]string) {
+		rw := &Request{
+			Params: Param(params),
+			Res:    NewResponseWriter(w),
+			Req:    r,
+		}
+
+		_, err := handler(ctx, nil, rw)
+		if err != nil && !rw.Res.DataWritten() {
+			RenderResponseError(err, rw)
+		}
+	}
+}
+
+// WrapRequestFractalHandler returns a function which wraps a fractal.Handler
+// passing in the request object it receives.
+func WrapRequestFractalHandler(handler fractals.Handler) func(context.Context, *Request) error {
+	return func(ctx context.Context, rw *Request) error {
+		_, err := handler(ctx, nil, rw)
+		return err
+	}
+}
+
 // DriveMiddleware defines a function type which accepts a context and Request
 // returning the request or an error.
 type DriveMiddleware func(context.Context, *Request) (*Request, error)
@@ -175,34 +208,49 @@ func (e Endpoint) handlerFunc(globalWM DriveMiddleware) func(w http.ResponseWrit
 			return nil
 		}
 
+	case fractals.Handler:
+		handler := e.Action.(fractals.Handler)
+		action = func(ctx context.Context, r *Request) error {
+			if _, err := handler(ctx, nil, r); err != nil {
+				return err
+			}
+
+			return nil
+		}
+
 	default:
-		return nil
+		mw := fractals.MustWrap(e.Action)
+		action = WrapRequestFractalHandler(mw)
 	}
 
 	var localWM DriveMiddleware
 
-	switch e.LocalMW.(type) {
-	case func(context.Context, error, interface{}) (interface{}, error):
-		localWM = WrapMiddleware(e.LocalMW.(func(context.Context, error, interface{}) (interface{}, error)))
-	case []func(context.Context, error, interface{}) (interface{}, error):
-		fm := e.LocalMW.([]fractals.Handler)
-		localWM = WrapMiddleware(fm...)
-	case func(interface{}) fractals.Handler:
-		localWM = WrapMiddleware(e.LocalMW.(func(interface{}) fractals.Handler)(fractals.IdentityHandler()))
-	case func(context.Context, *Request) error:
-		elx := e.LocalMW.(func(context.Context, *Request) error)
-		localWM = func(ctx context.Context, rw *Request) (*Request, error) {
-			if err := elx(ctx, rw); err != nil {
-				return nil, err
-			}
+	if e.LocalMW != nil {
 
-			return rw, nil
+		switch e.LocalMW.(type) {
+		case func(context.Context, error, interface{}) (interface{}, error):
+			localWM = WrapMiddleware(e.LocalMW.(func(context.Context, error, interface{}) (interface{}, error)))
+		case []func(context.Context, error, interface{}) (interface{}, error):
+			fm := e.LocalMW.([]fractals.Handler)
+			localWM = WrapMiddleware(fm...)
+		case func(interface{}) fractals.Handler:
+			localWM = WrapMiddleware(e.LocalMW.(func(interface{}) fractals.Handler)(fractals.IdentityHandler()))
+		case func(context.Context, *Request) error:
+			elx := e.LocalMW.(func(context.Context, *Request) error)
+			localWM = func(ctx context.Context, rw *Request) (*Request, error) {
+				if err := elx(ctx, rw); err != nil {
+					return nil, err
+				}
+
+				return rw, nil
+			}
+		case func(ctx context.Context, rw *Request) (*Request, error):
+			localWM = e.LocalMW.(func(ctx context.Context, rw *Request) (*Request, error))
+		default:
+			mw := fractals.MustWrap(e.LocalMW)
+			localWM = WrapMiddleware(mw)
 		}
-	case func(ctx context.Context, rw *Request) (*Request, error):
-		localWM = e.LocalMW.(func(ctx context.Context, rw *Request) (*Request, error))
-	default:
-		mw := fractals.MustWrap(e.LocalMW)
-		localWM = WrapMiddleware(mw)
+
 	}
 
 	return func(w http.ResponseWriter, r *http.Request, params map[string]string) {

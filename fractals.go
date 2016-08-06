@@ -66,6 +66,8 @@ func Wrap(node interface{}) Handler {
 	var hl Handler
 
 	switch node.(type) {
+	case Handler:
+		hl = node.(Handler)
 	case func():
 		hl = func(ctx context.Context, err error, d interface{}) (interface{}, error) {
 			node.(func())()
@@ -736,6 +738,13 @@ func SubLift(applier interface{}, root Handler, lifts ...Handler) Handler {
 
 		return subApply(ctx, rootRes, liftRes)
 	}
+}
+
+// Rewind stacks the rewind Handler both at the beginning and end of a series
+// of Handlers, thereby calling it both at start and stop of the calls.
+func Rewind(rewind Handler, lifts ...Handler) Handler {
+	reLifts := []Handler{rewind, Lift(lifts...)(nil), rewind}
+	return Lift(reLifts...)(nil)
 }
 
 // SubLiftReplay takes a root Handler, applier the arguments it recievies, then

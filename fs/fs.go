@@ -156,7 +156,7 @@ func Close() fractals.Handler {
 // OpenFile creates the giving file within the provided directly and
 // writes the any recieved data into the file. It sends the file Handler,
 // down the piepline.
-func OpenFile(path string, append bool) fractals.Handler {
+func OpenFile(path string) fractals.Handler {
 	return fractals.MustWrap(func(ctx context.Context, _ interface{}) (*os.File, error) {
 		file, err := os.Open(path)
 		if err != nil {
