@@ -13,6 +13,14 @@ import (
 	"github.com/influx6/fractals"
 )
 
+// StripPrefix returns the path which has a prefix if found stripped from its
+// string recieved.
+func StripPrefix(prefix string) fractals.Handler {
+	return fractals.MustWrap(func(path string) string {
+		return strings.TrimPrefix(path, prefix)
+	})
+}
+
 // ReadFile adds a readFile operation whoes contents get passed to the next
 // event/Node/Task in the link.
 func ReadFile() fractals.Handler {

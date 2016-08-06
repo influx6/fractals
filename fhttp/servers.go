@@ -14,6 +14,13 @@ import (
 // returning the request or an error.
 type DriveMiddleware func(context.Context, *Request) (*Request, error)
 
+// IdentityMiddleware returns a function which always returns the Request object received.
+func IdentityMiddleware() func(context.Context, *Request) (*Request, error) {
+	return func(_ context.Context, rw *Request) (*Request, error) {
+		return rw, nil
+	}
+}
+
 // WrapMW returns a new handler where the first wraps the second with its returned
 // values.
 func WrapMW(h1, h2 DriveMiddleware) DriveMiddleware {

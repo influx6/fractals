@@ -310,6 +310,17 @@ func IdentityHandler() Handler {
 	}
 }
 
+// Replay returns a Handler which always returns the provided item.
+func Replay(item interface{}) Handler {
+	return func(ctx context.Context, err error, _ interface{}) (interface{}, error) {
+		if err != nil {
+			return nil, err
+		}
+
+		return item, nil
+	}
+}
+
 // dataHandler defines a function type that concentrates on handling only data
 // replies alone.
 type dataHandler func(context.Context, interface{}) (interface{}, error)
@@ -499,6 +510,7 @@ func ReturnApplier(firstArg bool) SubApplier {
 		if firstArg {
 			return dl, nil
 		}
+
 		return rl, nil
 	}
 }
@@ -729,8 +741,8 @@ func SubLift(applier interface{}, root Handler, lifts ...Handler) Handler {
 // SubLiftReplay takes a root Handler, applier the arguments it recievies, then
 // applies specific operations to the lifts sets but returns the return value of
 // the root Handler.
-func SubLiftReplay(root Handler, lifts ...Handler) Handler {
-	return SubLift(ReturnApplier(true), root, lifts...)
+func SubLiftReplay(side bool, root Handler, lifts ...Handler) Handler {
+	return SubLift(ReturnApplier(side), root, lifts...)
 }
 
 // LiftHandler defines a type that takes a interface which must be a function

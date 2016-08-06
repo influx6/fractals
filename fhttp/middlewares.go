@@ -24,21 +24,38 @@ func MimeWriter() fractals.Handler {
 	})
 }
 
-//
+// PathName returns the path of the received *Request.
 func PathName() fractals.Handler {
 	return fractals.MustWrap(func(rw *fhttp.Request) string {
 		return rw.Req.URL.Path
 	})
 }
 
-// FileServer returns a server capable of serving different files from the provided
+// FileServer returns a handler capable of serving different files from the provided
 // directory but using inputed URL path.
-func FileServer(dir string) fractals.Handler {
-	files := fractals.Lift(fs.ResolvePathStringIn(dir), fs.ReadFile())
+func FileServer(dir string, prefix string) fractals.Handler {
+	var stripper Handler
 
+	if prefix != "" {
+		stripper = fs.StripPrefix(prefix)
+	} else {
+		stripper = fractals.IdentityHandler()
+	}
+
+	return fractals.SubLiftReplay(true, IdentityMiddleware(), MimeWriter(),
+		PathName(), stripper, fs.ResolvePathStringIn(dir), fs.ReadFile())
 }
 
+// DirServer returns a fractals.Handler which servers a giving directory
+// every single time it receives a request.
 func DirServer(dir string) fractals.Handler {
-	dirs := fractals.Lift(fs.ReadDirPath(), fs.SkipStat(fs.IsDir), fs.UnwrapStats(), fhttp.JSONEncoder())
+	return fractals.SubLift(func(rw *Request, data []byte) (*Request, error) {
+		if _, err := rw.Res.Write(data); err != nil {
+			return nil, err
+		}
 
+		return rw, nil
+	}, IdentityMiddleware(),
+		fractals.Replay(dir), fs.ReadDirPath(), fs.SkipStat(fs.IsDir), fs.UnwrapStats(),
+		fhttp.JSONEncoder())
 }
