@@ -13,10 +13,10 @@ import (
 
 func TestHTTPDrive(t *testing.T) {
 
-	drive := fhttp.NewHTTP(func(ctx context.Context, rw *fhttp.Request) (*fhttp.Request, error) {
+	drive := fhttp.NewHTTP([]fhttp.DriveMiddleware{func(ctx context.Context, rw *fhttp.Request) (*fhttp.Request, error) {
 		ctx.Set("names", []string{"fall-out", "reckless"})
 		return rw, nil
-	})
+	}}, nil)
 
 	router := fhttp.Route(drive)
 
@@ -69,10 +69,10 @@ func TestHTTPDrive(t *testing.T) {
 
 func TestHTTPDriveWithFractalHandlers(t *testing.T) {
 
-	drive := fhttp.NewHTTP(func(ctx context.Context, rw *fhttp.Request) (*fhttp.Request, error) {
+	drive := fhttp.NewHTTP([]fhttp.DriveMiddleware{func(ctx context.Context, rw *fhttp.Request) (*fhttp.Request, error) {
 		ctx.Set("names", []string{"fall-out", "reckless"})
 		return rw, nil
-	})
+	}}, nil)
 
 	router := fhttp.Route(drive)
 

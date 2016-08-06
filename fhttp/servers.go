@@ -94,6 +94,78 @@ func LiftWM(mws ...DriveMiddleware) DriveMiddleware {
 	return base
 }
 
+// WrapForMW takes a giving interface and asserts it into a DriveMiddleware or
+// wraps it if needed, returning the middleware.
+func WrapForMW(wm interface{}) DriveMiddleware {
+	var localWM DriveMiddleware
+
+	switch wm.(type) {
+	case func(context.Context, error, interface{}) (interface{}, error):
+		localWM = WrapMiddleware(wm.(func(context.Context, error, interface{}) (interface{}, error)))
+	case []func(context.Context, error, interface{}) (interface{}, error):
+		fm := wm.([]fractals.Handler)
+		localWM = WrapMiddleware(fm...)
+	case func(interface{}) fractals.Handler:
+		localWM = WrapMiddleware(wm.(func(interface{}) fractals.Handler)(fractals.IdentityHandler()))
+	case func(context.Context, *Request) error:
+		elx := wm.(func(context.Context, *Request) error)
+		localWM = func(ctx context.Context, rw *Request) (*Request, error) {
+			if err := elx(ctx, rw); err != nil {
+				return nil, err
+			}
+
+			return rw, nil
+		}
+	case func(ctx context.Context, rw *Request) (*Request, error):
+		localWM = wm.(func(ctx context.Context, rw *Request) (*Request, error))
+	default:
+		mws := fractals.MustWrap(wm)
+		localWM = WrapMiddleware(mws)
+	}
+
+	return localWM
+}
+
+// WrapForAction returns a action which is typed asserts or morph into a
+// fractal http handler.
+func WrapForAction(action interface{}) func(context.Context, *Request) error {
+	switch action.(type) {
+	case func(w http.ResponseWriter, r *http.Request, params map[string]interface{}):
+		handler := action.(func(w http.ResponseWriter, r *http.Request, params map[string]string))
+		return func(ctx context.Context, rw *Request) error {
+			handler(rw.Res, rw.Req, map[string]string{})
+			return nil
+		}
+
+	case func(context.Context, *Request) error:
+		return action.(func(context.Context, *Request) error)
+
+	case func(context.Context, error, interface{}) (interface{}, error):
+		handler := action.(func(context.Context, error, interface{}) (interface{}, error))
+		return func(ctx context.Context, r *Request) error {
+			if _, err := handler(ctx, nil, r); err != nil {
+				return err
+			}
+
+			return nil
+		}
+
+	case fractals.Handler:
+		handler := action.(fractals.Handler)
+		return func(ctx context.Context, r *Request) error {
+			if _, err := handler(ctx, nil, r); err != nil {
+				return err
+			}
+
+			return nil
+		}
+
+	default:
+		mw := fractals.MustWrap(action)
+		return WrapRequestFractalHandler(mw)
+	}
+}
+
 // WrapMiddleware wraps a Handler or lifted Handler from the slices of Handlers
 // which when runned must return either a (*Request, io.WriteTo, io.Reader,[]byte),
 // if it matches others except a *Request, then their contents will be written to
@@ -159,7 +231,8 @@ func WrapMiddleware(handlers ...fractals.Handler) DriveMiddleware {
 // httptreemux.Tree underneath.
 type HTTPDrive struct {
 	*httptreemux.TreeMux
-	globalMW DriveMiddleware // global middleware.
+	globalMW      DriveMiddleware // global middleware.
+	globalMWAfter DriveMiddleware // global middleware.
 }
 
 // Serve lunches the drive with a http server.
@@ -173,10 +246,11 @@ func (hd *HTTPDrive) ServeTLS(addr string, certFile string, keyFile string) {
 }
 
 // NewHTTP returns a new instance of the HTTPDrive struct.
-func NewHTTP(handlers ...DriveMiddleware) *HTTPDrive {
+func NewHTTP(before []DriveMiddleware, after []DriveMiddleware) *HTTPDrive {
 	var drive HTTPDrive
 	drive.TreeMux = httptreemux.New()
-	drive.globalMW = LiftWM(handlers...)
+	drive.globalMW = LiftWM(before...)
+	drive.globalMWAfter = LiftWM(after...)
 	return &drive
 }
 
@@ -186,71 +260,21 @@ type Endpoint struct {
 	Method  string
 	Action  interface{}
 	LocalMW interface{}
+	AfterWM interface{}
 }
 
-func (e Endpoint) handlerFunc(globalWM DriveMiddleware) func(w http.ResponseWriter, r *http.Request, params map[string]string) {
-	var action func(context.Context, *Request) error
-
-	switch e.Action.(type) {
-	case func(w http.ResponseWriter, r *http.Request, params map[string]interface{}):
-		return e.Action.(func(w http.ResponseWriter, r *http.Request, params map[string]string))
-
-	case func(context.Context, *Request) error:
-		action = e.Action.(func(context.Context, *Request) error)
-
-	case func(context.Context, error, interface{}) (interface{}, error):
-		handler := e.Action.(func(context.Context, error, interface{}) (interface{}, error))
-		action = func(ctx context.Context, r *Request) error {
-			if _, err := handler(ctx, nil, r); err != nil {
-				return err
-			}
-
-			return nil
-		}
-
-	case fractals.Handler:
-		handler := e.Action.(fractals.Handler)
-		action = func(ctx context.Context, r *Request) error {
-			if _, err := handler(ctx, nil, r); err != nil {
-				return err
-			}
-
-			return nil
-		}
-
-	default:
-		mw := fractals.MustWrap(e.Action)
-		action = WrapRequestFractalHandler(mw)
-	}
+func (e Endpoint) handlerFunc(globalBeforeWM, globalAfterWM DriveMiddleware) func(w http.ResponseWriter, r *http.Request, params map[string]string) {
+	action := WrapForAction(e.Action)
 
 	var localWM DriveMiddleware
+	var afterWM DriveMiddleware
 
 	if e.LocalMW != nil {
+		localWM = WrapForMW(e.LocalMW)
+	}
 
-		switch e.LocalMW.(type) {
-		case func(context.Context, error, interface{}) (interface{}, error):
-			localWM = WrapMiddleware(e.LocalMW.(func(context.Context, error, interface{}) (interface{}, error)))
-		case []func(context.Context, error, interface{}) (interface{}, error):
-			fm := e.LocalMW.([]fractals.Handler)
-			localWM = WrapMiddleware(fm...)
-		case func(interface{}) fractals.Handler:
-			localWM = WrapMiddleware(e.LocalMW.(func(interface{}) fractals.Handler)(fractals.IdentityHandler()))
-		case func(context.Context, *Request) error:
-			elx := e.LocalMW.(func(context.Context, *Request) error)
-			localWM = func(ctx context.Context, rw *Request) (*Request, error) {
-				if err := elx(ctx, rw); err != nil {
-					return nil, err
-				}
-
-				return rw, nil
-			}
-		case func(ctx context.Context, rw *Request) (*Request, error):
-			localWM = e.LocalMW.(func(ctx context.Context, rw *Request) (*Request, error))
-		default:
-			mw := fractals.MustWrap(e.LocalMW)
-			localWM = WrapMiddleware(mw)
-		}
-
+	if e.AfterWM != nil {
+		afterWM = WrapForMW(e.AfterWM)
 	}
 
 	return func(w http.ResponseWriter, r *http.Request, params map[string]string) {
@@ -263,12 +287,13 @@ func (e Endpoint) handlerFunc(globalWM DriveMiddleware) func(w http.ResponseWrit
 
 		// Run the global middleware first and recieve its returned values.
 		var err error
-		if globalWM != nil {
-			rw, err = globalWM(ctx, rw)
+		if globalBeforeWM != nil {
+			rw, err = globalBeforeWM(ctx, rw)
 		}
 
 		if err != nil && !rw.Res.DataWritten() {
 			RenderResponseError(err, rw)
+			return
 		}
 
 		// Run local middleware second and receive its return values.
@@ -278,10 +303,30 @@ func (e Endpoint) handlerFunc(globalWM DriveMiddleware) func(w http.ResponseWrit
 
 		if err != nil && !rw.Res.DataWritten() {
 			RenderResponseError(err, rw)
+			return
 		}
 
 		if err := action(ctx, rw); err != nil && !rw.Res.DataWritten() {
 			RenderResponseError(err, rw)
+			return
+		}
+
+		if afterWM != nil {
+			rw, err = afterWM(ctx, rw)
+		}
+
+		if err != nil && !rw.Res.DataWritten() {
+			RenderResponseError(err, rw)
+			return
+		}
+
+		if globalAfterWM != nil {
+			rw, err = globalAfterWM(ctx, rw)
+		}
+
+		if err != nil && !rw.Res.DataWritten() {
+			RenderResponseError(err, rw)
+			return
 		}
 	}
 }
@@ -290,7 +335,7 @@ func (e Endpoint) handlerFunc(globalWM DriveMiddleware) func(w http.ResponseWrit
 // http endpoints.
 func Route(drive *HTTPDrive) func(Endpoint) error {
 	return func(end Endpoint) error {
-		drive.Handle(end.Method, end.Path, end.handlerFunc(drive.globalMW))
+		drive.Handle(end.Method, end.Path, end.handlerFunc(drive.globalMW, drive.globalMWAfter))
 		return nil
 	}
 }
@@ -298,6 +343,6 @@ func Route(drive *HTTPDrive) func(Endpoint) error {
 // RouteBy provides a more direct function that lets you specify the drive and
 // endpoint directly.
 func RouteBy(drive *HTTPDrive, end Endpoint) error {
-	drive.Handle(end.Method, end.Path, end.handlerFunc(drive.globalMW))
+	drive.Handle(end.Method, end.Path, end.handlerFunc(drive.globalMW, drive.globalMWAfter))
 	return nil
 }

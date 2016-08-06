@@ -3,13 +3,12 @@ package fhttp
 import (
 	"fmt"
 	"io"
-	"mime"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/influx6/fractals"
-	_ "github.com/influx6/fractals/fhttp/mimes"
+	"github.com/influx6/fractals/fhttp/mimes"
 	"github.com/influx6/fractals/fs"
 )
 
@@ -17,12 +16,7 @@ import (
 // the URL path name and applies that to the request.
 func MimeWriter() fractals.Handler {
 	return fractals.MustWrap(func(rw *Request) *Request {
-		ctn := mime.TypeByExtension(filepath.Ext(rw.Req.URL.Path))
-
-		if ctn == "" {
-			ctn = "text/plain"
-		}
-
+		ctn := mimes.GetByExtensionName(filepath.Ext(rw.Req.URL.Path))
 		rw.Res.Header().Add("Content-Type", ctn)
 		return rw
 	})
@@ -32,12 +26,7 @@ func MimeWriter() fractals.Handler {
 // extension of the file.
 func MimeWriterFor(file string) fractals.Handler {
 	return fractals.MustWrap(func(rw *Request) *Request {
-		ctn := mime.TypeByExtension(file)
-
-		if ctn == "" {
-			ctn = "text/plain"
-		}
-
+		ctn := mimes.GetByExtensionName(filepath.Ext(file))
 		rw.Res.Header().Add("Content-Type", ctn)
 		return rw
 	})
@@ -48,8 +37,13 @@ func MimeWriterFor(file string) fractals.Handler {
 func LogWith(w io.Writer) fractals.Handler {
 	return fractals.MustWrap(func(rw *Request) *Request {
 		now := time.Now().UTC()
-		content := rw.Req.Header.Get("Content-Type")
-		fmt.Fprintf(w, "HTTP : %q : Content{%s} : Method{%s} : URI{%s}\n", now.Format("2001-43-21 01:32:32"), content, rw.Req.Method, rw.Req.URL)
+		content := rw.Req.Header.Get("Accept")
+
+		if !rw.Res.StatusWritten() {
+			fmt.Fprintf(w, "HTTP : %q : Content{%s} : Method{%s} : URI{%s}\n", now, content, rw.Req.Method, rw.Req.URL)
+		} else {
+			fmt.Fprintf(w, "HTTP : %q : Status{%d} : Content{%s} : Method{%s} : URI{%s}\n", now, rw.Res.Status(), rw.Res.Header().Get("Content-Type"), rw.Req.Method, rw.Req.URL)
+		}
 		return rw
 	})
 }
