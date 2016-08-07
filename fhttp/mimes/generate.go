@@ -105,6 +105,7 @@ func GetByExtensionName(ext string) string {
 func GetByExtension(ext string) (Extension, bool) {
   extnd := strings.TrimPrefix(ext,".")
   extnd2 := strings.ToLower(extnd)
+  extnd3 := strings.ToUpper(extnd)
 
   var end Extension
   var has bool
@@ -114,6 +115,10 @@ func GetByExtension(ext string) (Extension, bool) {
     end, has = extDB.db[extnd]
     if !has{
       end, has = extDB.db[extnd2]
+
+	    if !has{
+	      end, has = extDB.db[extnd3]
+	    }
     }
   }
   extDB.dbl.RUnlock()
@@ -125,18 +130,21 @@ func GetByExtension(ext string) (Extension, bool) {
 func AddExtensionType(ext string, typed string, references ...string){
   extnd := strings.TrimPrefix(ext,".")
   extnd2 := strings.ToLower(extnd)
+  extnd3 := strings.ToUpper(extnd)
 
   var has bool
   var has2 bool
+  var has3 bool
 
   extDB.dbl.RLock()
   {
     _, has = extDB.db[extnd]
     _, has2 = extDB.db[extnd2]
+    _, has3 = extDB.db[extnd3]
   }
   extDB.dbl.RUnlock()
 
-  if has || has2 {
+  if has || has2 || has3 {
     return
   }
 
