@@ -11,9 +11,13 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
+
+//==============================================================================
 
 //LoadTLS loads a tls.Config from a key and cert file path
 func LoadTLS(cert string, key string) (*tls.Config, error) {
@@ -21,7 +25,11 @@ func LoadTLS(cert string, key string) (*tls.Config, error) {
 	config.Certificates = make([]tls.Certificate, 1)
 
 	c, err := tls.LoadX509KeyPair(cert, key)
+	if err != nil {
+		return nil, err
+	}
 
+	c.Leaf, err = x509.ParseCertificate(c.Certificate[0])
 	if err != nil {
 		return nil, err
 	}
@@ -29,6 +37,58 @@ func LoadTLS(cert string, key string) (*tls.Config, error) {
 	config.Certificates[0] = c
 	return config, nil
 }
+
+// TLSVersion returns a string version number based on the tls version int.
+func TLSVersion(ver uint16) string {
+	switch ver {
+	case tls.VersionTLS10:
+		return "1.0"
+	case tls.VersionTLS11:
+		return "1.1"
+	case tls.VersionTLS12:
+		return "1.2"
+	}
+	return fmt.Sprintf("Unknown [%x]", ver)
+}
+
+// TLSCipher returns a cipher string version based on the supplied hex value.
+func TLSCipher(cs uint16) string {
+	switch cs {
+	case 0x0005:
+		return "TLS_RSA_WITH_RC4_128_SHA"
+	case 0x000a:
+		return "TLS_RSA_WITH_3DES_EDE_CBC_SHA"
+	case 0x002f:
+		return "TLS_RSA_WITH_AES_128_CBC_SHA"
+	case 0x0035:
+		return "TLS_RSA_WITH_AES_256_CBC_SHA"
+	case 0xc007:
+		return "TLS_ECDHE_ECDSA_WITH_RC4_128_SHA"
+	case 0xc009:
+		return "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA"
+	case 0xc00a:
+		return "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA"
+	case 0xc011:
+		return "TLS_ECDHE_RSA_WITH_RC4_128_SHA"
+	case 0xc012:
+		return "TLS_ECDHE_RSA_WITH_3DES_EDE_CBC_SHA"
+	case 0xc013:
+		return "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"
+	case 0xc014:
+		return "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA"
+	case 0xc02f:
+		return "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"
+	case 0xc02b:
+		return "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"
+	case 0xc030:
+		return "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"
+	case 0xc02c:
+		return "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"
+	}
+	return fmt.Sprintf("Unknown [%x]", cs)
+}
+
+//==============================================================================
 
 //MakeListener returns a new net.Listener for http.Request
 func MakeListener(protocol string, addr string, conf *tls.Config) (net.Listener, error) {
@@ -70,6 +130,17 @@ func NewHTTPServer(l net.Listener, handle http.Handler, c *tls.Config) (*http.Se
 	go s.Serve(tl)
 
 	return s, tl, nil
+}
+
+func isIPInList(list1 []net.IP, list2 []net.IP) bool {
+	for _, ip1 := range list1 {
+		for _, ip2 := range list2 {
+			if ip1.Equal(ip2) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // NewConn returns a tls.Conn object from the provided parameters.
@@ -246,4 +317,126 @@ func HTTPToConn(srcReq *http.Request, srcRes http.ResponseWriter, dest net.Conn)
 	}
 
 	return nil
+}
+
+//==============================================================================
+
+func getClustersFriends(clusterPort int, routes []*url.URL) ([]*url.URL, error) {
+	var cleanRoutes []*url.URL
+	cport := strconv.Itoa(clusterPort)
+
+	selfIPs, err := getInterfaceIPs()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, r := range routes {
+		host, port, err := net.SplitHostPort(r.Host)
+		if err != nil {
+			return nil, err
+		}
+
+		ips, err := getURLIP(host)
+		if err != nil {
+			return nil, err
+		}
+
+		if cport == port && isIPInList(selfIPs, ips) {
+			continue
+		}
+
+		cleanRoutes = append(cleanRoutes, r)
+	}
+
+	return cleanRoutes, nil
+}
+
+func getURLIP(ipStr string) ([]net.IP, error) {
+	ipList := []net.IP{}
+
+	ip := net.ParseIP(ipStr)
+	if ip != nil {
+		ipList = append(ipList, ip)
+		return ipList, nil
+	}
+
+	hostAddr, err := net.LookupHost(ipStr)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, addr := range hostAddr {
+		ip = net.ParseIP(addr)
+		if ip != nil {
+			ipList = append(ipList, ip)
+		}
+	}
+
+	return ipList, nil
+}
+
+func getInterfaceIPs() ([]net.IP, error) {
+	var localIPs []net.IP
+
+	interfaceAddr, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil, errors.New("Error getting self referencing addr")
+	}
+
+	for i := 0; i < len(interfaceAddr); i++ {
+		interfaceIP, _, _ := net.ParseCIDR(interfaceAddr[i].String())
+		if net.ParseIP(interfaceIP.String()) != nil {
+			localIPs = append(localIPs, interfaceIP)
+		} else {
+			err = errors.New("Error getting self referencing addr")
+		}
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return localIPs, nil
+}
+
+// Helper to move from float seconds to time.Duration
+func secondsToDuration(seconds float64) time.Duration {
+	ttl := seconds * float64(time.Second)
+	return time.Duration(ttl)
+}
+
+// Ascii numbers 0-9
+const (
+	asciiZero = 48
+	asciiNine = 57
+)
+
+// parseSize expects decimal positive numbers. We
+// return -1 to signal error
+func parseSize(d []byte) (n int) {
+	if len(d) == 0 {
+		return -1
+	}
+	for _, dec := range d {
+		if dec < asciiZero || dec > asciiNine {
+			return -1
+		}
+		n = n*10 + (int(dec) - asciiZero)
+	}
+	return n
+}
+
+// parseInt64 expects decimal positive numbers. We
+// return -1 to signal error
+func parseInt64(d []byte) (n int64) {
+	if len(d) == 0 {
+		return -1
+	}
+	for _, dec := range d {
+		if dec < asciiZero || dec > asciiNine {
+			return -1
+		}
+		n = n*10 + (int64(dec) - asciiZero)
+	}
+	return n
 }
