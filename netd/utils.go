@@ -1,4 +1,4 @@
-package net
+package netd
 
 import (
 	"bufio"
@@ -20,8 +20,9 @@ import (
 //==============================================================================
 
 //LoadTLS loads a tls.Config from a key and cert file path
-func LoadTLS(cert string, key string) (*tls.Config, error) {
+func LoadTLS(cert string, key string, ca string) (*tls.Config, error) {
 	var config *tls.Config
+	config.MinVersion = tls.VersionTLS12
 	config.Certificates = make([]tls.Certificate, 1)
 
 	c, err := tls.LoadX509KeyPair(cert, key)
@@ -32,6 +33,24 @@ func LoadTLS(cert string, key string) (*tls.Config, error) {
 	c.Leaf, err = x509.ParseCertificate(c.Certificate[0])
 	if err != nil {
 		return nil, err
+	}
+
+	if ca != "" {
+		rootPEM, err := ioutil.ReadFile(ca)
+		if err != nil {
+			return nil, err
+		}
+
+		if rootPEM == nil {
+			return nil, errors.New("Empty perm file")
+		}
+
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(rootPEM) {
+			return nil, errors.New("Failed to append perm file data")
+		}
+
+		config.RootCAs = pool
 	}
 
 	config.Certificates[0] = c
