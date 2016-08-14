@@ -19,8 +19,9 @@ type TCPConn struct {
 	config Config
 	mc     sync.Mutex
 	sid    string
-	tcp    net.Listener
-	http   net.Listener
+
+	tcpClient  net.Listener
+	tcpCluster net.Listener
 
 	clients  []Provider
 	clusters []Provider
@@ -49,6 +50,56 @@ func TCP(c Config) *TCPConn {
 	return &cn
 }
 
+// SendToClusters sends the provided message to all clusters.
+func (c *TCPConn) SendToClusters(context interface{}, msg []byte) error {
+	c.mc.Lock()
+	defer c.mc.Unlock()
+
+	for _, cluster := range c.clusters {
+		cluster.SendMessage(context, msg)
+	}
+
+	return nil
+}
+
+// SendToClusters sends the provided message to all clients.
+func (c *TCPConn) SendToClients(context interface{}, msg []byte) error {
+	c.mc.Lock()
+	defer c.mc.Unlock()
+
+	for _, client := range c.clients {
+		client.SendMessage(context, msg)
+	}
+
+	return nil
+}
+
+func (c *TCPConn) Close() error {
+	if !c.IsRunning() {
+		return nil
+	}
+
+	c.mc.Lock()
+	c.runningClient = false
+	c.runningCluster = false
+	c.mc.Unlock()
+
+	c.mc.Lock()
+	if err := c.tcpClient.Close(); err != nil {
+		c.mc.Unlock()
+		return err
+	}
+
+	c.mc.Lock()
+	if err := c.tcpCluster.Close(); err != nil {
+		c.mc.Unlock()
+		return err
+	}
+
+	c.mc.Unlock()
+	return nil
+}
+
 // IsRunning returns true/false if the connection is up.
 func (c *TCPConn) IsRunning() bool {
 	var state bool
@@ -73,14 +124,14 @@ func (c *TCPConn) ServeClusters(context interface{}, h Handler) error {
 		return nil
 	}
 
-	c.tcp, err = net.Listen("tcp", addr)
+	c.tcpCluster, err = net.Listen("tcp", addr)
 	if err != nil {
 		c.config.Log.Error(context, "tcp.ServeCluster", err, "Completed")
 		c.mc.Unlock()
 		return err
 	}
 
-	ip, port, _ := net.SplitHostPort(c.tcp.Addr().String())
+	ip, port, _ := net.SplitHostPort(c.tcpCluster.Addr().String())
 	iport, _ := strconv.Atoi(port)
 
 	var info BaseInfo
@@ -113,14 +164,14 @@ func (c *TCPConn) ServeClients(context interface{}, h Handler) error {
 		return nil
 	}
 
-	c.tcp, err = net.Listen("tcp", addr)
+	c.tcpClient, err = net.Listen("tcp", addr)
 	if err != nil {
 		c.config.Log.Error(context, "tcp.ServeClients", err, "Completed")
 		c.mc.Unlock()
 		return err
 	}
 
-	ip, port, _ := net.SplitHostPort(c.tcp.Addr().String())
+	ip, port, _ := net.SplitHostPort(c.tcpClient.Addr().String())
 	iport, _ := strconv.Atoi(port)
 
 	var info BaseInfo
@@ -160,7 +211,7 @@ func (c *TCPConn) clusterLoop(context interface{}, h Handler, info BaseInfo) {
 	{
 		for c.IsRunning() {
 
-			conn, err := c.tcp.Accept()
+			conn, err := c.tcpCluster.Accept()
 			if err != nil {
 				config.Log.Error(context, "tcp.clusterLoop", err, "Accept Error")
 				if tmpError, ok := err.(net.Error); ok && tmpError.Temporary() {
@@ -244,6 +295,13 @@ func (c *TCPConn) clusterLoop(context interface{}, h Handler, info BaseInfo) {
 				}
 
 				if !config.ClusterAuth.Authenticate(providerAuth) {
+					if config.MatchClusterCredentials(providerAuth.Credentials()) {
+						c.mc.Lock()
+						c.clients = append(c.clients, provider)
+						c.mc.Unlock()
+						continue
+					}
+
 					config.Log.Error(context, "tcp.clusterLoop", err, " New Connection : Addr[%a] : Provider does not match ClientAuth interface", conn.RemoteAddr().String())
 					provider.SendMessage(context, []byte("Error: Authentication failed"))
 					provider.Close(context)
@@ -284,7 +342,7 @@ func (c *TCPConn) clientLoop(context interface{}, h Handler, info BaseInfo) {
 	{
 		for c.IsRunning() {
 
-			conn, err := c.tcp.Accept()
+			conn, err := c.tcpClient.Accept()
 			if err != nil {
 				config.Log.Error(context, "tcp.clientLoop", err, "Accept Error")
 				if tmpError, ok := err.(net.Error); ok && tmpError.Temporary() {
@@ -368,6 +426,13 @@ func (c *TCPConn) clientLoop(context interface{}, h Handler, info BaseInfo) {
 				}
 
 				if !config.ClientAuth.Authenticate(providerAuth) {
+					if config.MatchClientCredentials(providerAuth.Credentials()) {
+						c.mc.Lock()
+						c.clients = append(c.clients, provider)
+						c.mc.Unlock()
+						continue
+					}
+
 					config.Log.Error(context, "tcp.clientLoop", err, " New Connection : Addr[%a] : Provider does not match ClientAuth interface", conn.RemoteAddr().String())
 					provider.SendMessage(context, []byte("Error: Authentication failed"))
 					provider.Close(context)
