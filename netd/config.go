@@ -5,16 +5,38 @@ import (
 	"time"
 )
 
+//==============================================================================
+
 // Trace defines an interface which receives data trace data logs.
 type Trace interface {
 	Trace(context interface{}, msg []byte)
 }
+
+// Tracer defines a empty tracer struct which allows a inplace tracer for when
+// tracing is disabled but still called in code.
+var Tracer tracer
+
+type tracer struct{}
+
+func (tracer) Trace(context interface{}, msg []byte) {}
 
 // Log defines an interface which receives logs events/messages.
 type Log interface {
 	Log(context interface{}, targetFunc string, message string, data ...interface{})
 	Error(context interface{}, targetFunc string, err error, message string, data ...interface{})
 }
+
+// Logger defines an empty logger which can be used in place for when logging is
+// is not set.
+var Logger logger
+
+type logger struct{}
+
+func (logger) Log(context interface{}, target string, message string, data ...interface{}) {}
+func (logger) Error(context interface{}, target string, err error, message string, data ...interface{}) {
+}
+
+//==============================================================================
 
 // Crendential defines a struct for storing user authentication crendentials.
 type Credential struct {
@@ -26,7 +48,7 @@ type Credential struct {
 // the connection handler.
 type Config struct {
 	Trace Trace `json:"-"`
-	Debug Log   `json:"-"`
+	Log   Log   `json:"-"`
 
 	ClientCrendentails []Credential `json:"-"`
 
@@ -49,7 +71,8 @@ type Config struct {
 	MaxPingInterval time.Duration `json:"max_ping_timeout"`
 	MaxPingTimeout  float64       `json:"max_ping_timeout"`
 
-	Authenticate bool `json:"authenticate"`
+	Authenticate     bool `json:"authenticate"`
+	MustAuthenticate bool `json:"must_authenticate"`
 
 	ClientAuth  Auth `json:"-"`
 	ClusterAuth Auth `json:"-"`
@@ -61,6 +84,17 @@ type Config struct {
 	TLSCaCertFile string      `json:"-"`
 	TLSVerify     bool        `json:"TLSVerify"`
 	TLSConfig     *tls.Config `json:"-"`
+}
+
+// InitLogAndTrace checks and assigns dummy log and trace callers to the config
+// if that was not set to ensure calls get passed through without panics.
+func (c Config) InitLogAndTrace() {
+	if c.Log == nil {
+		c.Log = Logger
+	}
+	if c.Trace == nil {
+		c.Trace = Tracer
+	}
 }
 
 // MatchClientCredentials matches the provided crendential against the
@@ -103,4 +137,18 @@ func (c Config) ParseTLS() error {
 	}
 
 	return nil
+}
+
+//==============================================================================
+
+// BaseInfo provides a struct which contains important data about the server
+// which is providing the connection handling.
+type BaseInfo struct {
+	Addr       string `json:"addr"`
+	Port       int    `json:"port"`
+	ServerID   string `json:"server_id"`
+	Version    string `json:"version"`
+	GoVersion  string `json:"go-version"`
+	IP         string `json:"ip,emitempty"`
+	MaxPayload int    `json:"max_payload"`
 }

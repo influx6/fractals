@@ -1,17 +1,19 @@
 package netd
 
+import "sync/atomic"
+
 // StatProvider provides a interfce which allows access to operations on
 // stats items.
 type StatProvider interface {
-  IncrementInMsg()
-  IncrementOutMsg()
-  IncrementRequest()
-  IncrementReads(size int)
-  IncrementWrites(size int)
+	IncrementInMsg()
+	IncrementOutMsg()
+	IncrementRequest()
+	IncrementReads(size int)
+	IncrementWrites(size int)
 }
 
-// Stat defines a struct for storing statistics data recieved from a provided 
-// Conn.
+// Stat defines a struct for storing statistics data recieved from a provided
+// Conn.s
 type Stat struct {
 	InMsg        int64
 	OutMsg       int64
@@ -26,8 +28,8 @@ func (stat Stat) IncrementWrites(size int) {
 	atomic.AddInt64(&stat.OutBytes, int64(size))
 }
 
-// IncrementOutMsg increments the OutMsg counter.
-func (stat Stat) IncrementRead(size int) {
+// IncrementReads increments the OutMsg counter.
+func (stat Stat) IncrementReads(size int) {
 	atomic.AddInt64(&stat.InBytes, int64(size))
 }
 

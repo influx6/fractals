@@ -24,7 +24,8 @@ type Broadcast interface {
 type Connection struct {
 	net.Conn
 	Config Config
-	Stat   Stat
+	Info   BaseInfo
+	Stat   StatProvider
 }
 
 // Handler defines a function handler which returns a new Provider from a
