@@ -84,19 +84,29 @@ func (c *TCPConn) Close() error {
 	c.runningCluster = false
 	c.mc.Unlock()
 
+	c.opWG.Wait()
+
 	c.mc.Lock()
 	if err := c.tcpClient.Close(); err != nil {
 		c.mc.Unlock()
 		return err
 	}
 
-	c.mc.Lock()
 	if err := c.tcpCluster.Close(); err != nil {
 		c.mc.Unlock()
 		return err
 	}
 
 	c.mc.Unlock()
+
+	for _, client := range c.clients {
+		client.Close("tcp.Close")
+	}
+
+	for _, cluster := range c.clusters {
+		cluster.Close("tcp.Close")
+	}
+
 	return nil
 }
 
@@ -309,6 +319,12 @@ func (c *TCPConn) clusterLoop(context interface{}, h Handler, info BaseInfo) {
 				}
 			}
 
+			// Listen for the end signal and descrease connection wait group.
+			go func() {
+				<-provider.CloseNotify()
+				c.conWG.Done()
+			}()
+
 			c.mc.Lock()
 			c.clusters = append(c.clusters, provider)
 			c.mc.Unlock()
@@ -439,6 +455,12 @@ func (c *TCPConn) clientLoop(context interface{}, h Handler, info BaseInfo) {
 					continue
 				}
 			}
+
+			// Listen for the end signal and descrease connection wait group.
+			go func() {
+				<-provider.CloseNotify()
+				c.conWG.Done()
+			}()
 
 			c.mc.Lock()
 			c.clients = append(c.clients, provider)

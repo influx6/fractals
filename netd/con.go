@@ -1,6 +1,9 @@
 package netd
 
-import "net"
+import (
+	"net"
+	"sync"
+)
 
 // Provider defines a interface for a connection handler, which ensures
 // to manage the request-response cycle of a provided net.Conn.
@@ -23,6 +26,7 @@ type Broadcast interface {
 // connection.
 type Connection struct {
 	net.Conn
+	cw     sync.WaitGroup
 	Config Config
 	Info   BaseInfo
 	Stat   StatProvider
