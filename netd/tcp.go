@@ -226,6 +226,7 @@ func (c *TCPConn) ServeClusters(context interface{}, h Handler) error {
 	info.IP = ip
 	info.Port = iport
 	info.Version = VERSION
+	info.MaxPayload = MAX_PAYLOAD_SIZE
 	info.GoVersion = runtime.Version()
 	info.ServerID = c.sid
 
@@ -266,6 +267,7 @@ func (c *TCPConn) ServeClients(context interface{}, h Handler) error {
 	info.IP = ip
 	info.Port = iport
 	info.Version = VERSION
+	info.MaxPayload = MAX_PAYLOAD_SIZE
 	info.GoVersion = runtime.Version()
 	info.ServerID = c.sid
 
@@ -319,6 +321,17 @@ func (c *TCPConn) clusterLoop(context interface{}, h Handler, info BaseInfo) {
 
 			var connection Connection
 
+			addr, port, _ := net.SplitHostPort(conn.RemoteAddr().String())
+			iport, _ := strconv.Atoi(port)
+
+			var connInfo BaseInfo
+			connInfo.Addr = addr
+			connInfo.Port = iport
+			connInfo.GoVersion = runtime.Version()
+			connInfo.MaxPayload = MAX_PAYLOAD_SIZE
+			connInfo.ServerID = uuid.New()
+			connInfo.Version = VERSION
+
 			// Check if we are required to be using TLS then try to wrap net.Conn
 			// to tls.Conn.
 			if useTLS {
@@ -348,19 +361,21 @@ func (c *TCPConn) clusterLoop(context interface{}, h Handler, info BaseInfo) {
 				}
 
 				connection = Connection{
-					Conn:       tlsConn,
-					Config:     config,
-					ServerInfo: info,
-					Stat:       stat,
+					Conn:           tlsConn,
+					Config:         config,
+					ServerInfo:     info,
+					ConnectionInfo: connInfo,
+					Stat:           stat,
 				}
 
 			} else {
 
 				connection = Connection{
-					Conn:       conn,
-					Config:     config,
-					ServerInfo: info,
-					Stat:       stat,
+					Conn:           conn,
+					Config:         config,
+					ServerInfo:     info,
+					ConnectionInfo: connInfo,
+					Stat:           stat,
 				}
 
 			}
@@ -456,6 +471,17 @@ func (c *TCPConn) clientLoop(context interface{}, h Handler, info BaseInfo) {
 
 			var connection Connection
 
+			addr, port, _ := net.SplitHostPort(conn.RemoteAddr().String())
+			iport, _ := strconv.Atoi(port)
+
+			var connInfo BaseInfo
+			connInfo.Addr = addr
+			connInfo.Port = iport
+			connInfo.GoVersion = runtime.Version()
+			connInfo.MaxPayload = MAX_PAYLOAD_SIZE
+			connInfo.ServerID = uuid.New()
+			connInfo.Version = VERSION
+
 			// Check if we are required to be using TLS then try to wrap net.Conn
 			// to tls.Conn.
 			if useTLS {
@@ -485,19 +511,21 @@ func (c *TCPConn) clientLoop(context interface{}, h Handler, info BaseInfo) {
 				}
 
 				connection = Connection{
-					Conn:       tlsConn,
-					Config:     config,
-					ServerInfo: info,
-					Stat:       stat,
+					Conn:           tlsConn,
+					Config:         config,
+					ServerInfo:     info,
+					ConnectionInfo: connInfo,
+					Stat:           stat,
 				}
 
 			} else {
 
 				connection = Connection{
-					Conn:       conn,
-					Config:     config,
-					ServerInfo: info,
-					Stat:       stat,
+					Conn:           conn,
+					Config:         config,
+					ServerInfo:     info,
+					ConnectionInfo: connInfo,
+					Stat:           stat,
 				}
 
 			}
