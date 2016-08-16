@@ -70,10 +70,13 @@ func (s SearchableInfo) HasInfo(target BaseInfo) bool {
 
 // Connections provides a interfae which lists connected clients and clusters.
 type Connections interface {
-	OnConnect(fn func(Provider))
-	OnDisconnect(fn func(Provider))
-	Clusters(context interface{}) SearchableInfo
 	Clients(context interface{}) SearchableInfo
+	OnClientConnect(fn func(Provider))
+	OnClientDisconnect(fn func(Provider))
+
+	Clusters(context interface{}) SearchableInfo
+	OnClusterConnect(fn func(Provider))
+	OnClusterDisconnect(fn func(Provider))
 }
 
 // Connection defines a struct which stores the incoming request for a
