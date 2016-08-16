@@ -348,19 +348,19 @@ func (c *TCPConn) clusterLoop(context interface{}, h Handler, info BaseInfo) {
 				}
 
 				connection = Connection{
-					Conn:   tlsConn,
-					Config: config,
-					Info:   info,
-					Stat:   stat,
+					Conn:       tlsConn,
+					Config:     config,
+					ServerInfo: info,
+					Stat:       stat,
 				}
 
 			} else {
 
 				connection = Connection{
-					Conn:   conn,
-					Config: config,
-					Info:   info,
-					Stat:   stat,
+					Conn:       conn,
+					Config:     config,
+					ServerInfo: info,
+					Stat:       stat,
 				}
 
 			}
@@ -485,19 +485,19 @@ func (c *TCPConn) clientLoop(context interface{}, h Handler, info BaseInfo) {
 				}
 
 				connection = Connection{
-					Conn:   tlsConn,
-					Config: config,
-					Info:   info,
-					Stat:   stat,
+					Conn:       tlsConn,
+					Config:     config,
+					ServerInfo: info,
+					Stat:       stat,
 				}
 
 			} else {
 
 				connection = Connection{
-					Conn:   conn,
-					Config: config,
-					Info:   info,
-					Stat:   stat,
+					Conn:       conn,
+					Config:     config,
+					ServerInfo: info,
+					Stat:       stat,
 				}
 
 			}

@@ -23,14 +23,47 @@ type Broadcast interface {
 	SendToClusters(context interface{}, msg []byte) error
 }
 
+// ConnectionInfo provides a interfae which lists connected clients and clusters.
+type ConnectionInfo interface {
+	Clusters() []BaseInfo
+	Clients() []BaseInfo
+}
+
+// SearchableInfo defines a BaseInfo slice which allows querying specific data
+// from giving info.
+type SearchableInfo []BaseInfo
+
+// GetInfosByIP searches if the giving address and port exists within the info list
+// returning the info that matches it.
+func (SearchableInfo) GetInfosByIP(ip string) ([]BaseInfo, error) {
+	var infos []BaseInfo
+
+	return infos, nil
+}
+
+// GetAddr searches if the giving address and port exists within the info list
+// returning the info that matches it.
+func (SearchableInfo) HasAddr(addr string, port int) (BaseInfo, error) {
+	var info BaseInfo
+
+	return info, nil
+}
+
+// HasInfo returns true if the info exists within the lists.
+func (SearchableInfo) HasInfo(info BaseInfo) bool {
+
+	return true
+}
+
 // Connection defines a struct which stores the incoming request for a
 // connection.
 type Connection struct {
 	net.Conn
-	cw     sync.WaitGroup
-	Config Config
-	Info   BaseInfo
-	Stat   StatProvider
+	cw             sync.WaitGroup
+	Config         Config
+	ServerInfo     BaseInfo
+	ConnectionInfo BaseInfo
+	Stat           StatProvider
 }
 
 // Handler defines a function handler which returns a new Provider from a
