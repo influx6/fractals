@@ -54,3 +54,9 @@ const (
 	// DEFAULT_PING_MAX_OUT is maximum allowed pings outstanding before disconnect.
 	DEFAULT_PING_MAX_OUT = 2
 )
+
+var (
+	emptyString = []byte("")
+	newLine     = []byte("\n")
+	endTrace    = []byte("End Trace")
+)

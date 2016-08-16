@@ -2,6 +2,7 @@ package netd
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"time"
 )
 
@@ -151,4 +152,14 @@ type BaseInfo struct {
 	GoVersion  string `json:"go-version"`
 	IP         string `json:"ip,emitempty"`
 	MaxPayload int    `json:"max_payload"`
+}
+
+// String returns a json parsed version of the BaseInfo.
+func (b BaseInfo) String() string {
+	jsn, err := json.Marshal(b)
+	if err != nil {
+		return ""
+	}
+
+	return string(jsn)
 }

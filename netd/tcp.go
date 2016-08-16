@@ -1,6 +1,7 @@
 package netd
 
 import (
+	"bytes"
 	"crypto/tls"
 	"net"
 	"runtime"
@@ -16,9 +17,12 @@ import (
 type TCPConn struct {
 	Stat
 
-	config Config
 	mc     sync.Mutex
+	config Config
 	sid    string
+
+	infoTCP     BaseInfo
+	infoCluster BaseInfo
 
 	tcpClient  net.Listener
 	tcpCluster net.Listener
@@ -43,8 +47,26 @@ func TCP(c Config) *TCPConn {
 		panic(err)
 	}
 
+	sid := uuid.New()
+
+	var info BaseInfo
+	info.Addr = c.Addr
+	info.Port = c.Port
+	info.Version = VERSION
+	info.GoVersion = runtime.Version()
+	info.ServerID = sid
+
+	var cinfo BaseInfo
+	cinfo.Addr = c.ClustersAddr
+	cinfo.Port = c.ClustersPort
+	cinfo.Version = VERSION
+	cinfo.GoVersion = runtime.Version()
+	cinfo.ServerID = sid
+
 	var cn TCPConn
-	cn.sid = uuid.New()
+	cn.sid = sid
+	cn.infoTCP = info
+	cn.infoCluster = cinfo
 	cn.config = c
 
 	return &cn
@@ -52,29 +74,74 @@ func TCP(c Config) *TCPConn {
 
 // SendToClusters sends the provided message to all clusters.
 func (c *TCPConn) SendToClusters(context interface{}, msg []byte) error {
+	c.config.Log.Log(context, "SendToCluster", "Started : Data[%+s]", msg)
+
 	c.mc.Lock()
 	defer c.mc.Unlock()
 
 	for _, cluster := range c.clusters {
-		cluster.SendMessage(context, msg)
+
+		var b [][]byte
+		b = append(b, []byte("Trace: SendToClients"))
+		b = append(b, newLine)
+		b = append(b, []byte("Cluster: "))
+		b = append(b, []byte(c.infoTCP.String()))
+		b = append(b, newLine)
+		b = append(b, []byte("ToCluster: "))
+		b = append(b, []byte(cluster.BaseInfo().String()))
+		b = append(b, newLine)
+		b = append(b, []byte("Data: "))
+		b = append(b, msg)
+		b = append(b, newLine)
+		c.config.Trace.Trace(context, bytes.Join(b, emptyString))
+
+		if err := cluster.SendMessage(context, msg); err != nil {
+			c.config.Log.Error(context, "SendToCluster", err, "Failed to deliver to cluster : Cluster[%s]", cluster.BaseInfo().String())
+		}
+
+		c.config.Trace.Trace(context, endTrace)
 	}
 
+	c.config.Log.Log(context, "SendToCluster", "Completed")
 	return nil
 }
 
 // SendToClusters sends the provided message to all clients.
 func (c *TCPConn) SendToClients(context interface{}, msg []byte) error {
+	c.config.Log.Log(context, "SendToClient", "Started : Data[%+s]", msg)
+
 	c.mc.Lock()
 	defer c.mc.Unlock()
 
 	for _, client := range c.clients {
-		client.SendMessage(context, msg)
+
+		var b [][]byte
+		b = append(b, []byte("Trace: SendToClients"))
+		b = append(b, newLine)
+		b = append(b, []byte("Cluster: "))
+		b = append(b, []byte(c.infoTCP.String()))
+		b = append(b, newLine)
+		b = append(b, []byte("ToClient: "))
+		b = append(b, []byte(client.BaseInfo().String()))
+		b = append(b, newLine)
+		b = append(b, []byte("Data: "))
+		b = append(b, msg)
+		b = append(b, newLine)
+		c.config.Trace.Trace(context, bytes.Join(b, emptyString))
+
+		if err := client.SendMessage(context, msg); err != nil {
+			c.config.Log.Error(context, "SendToClient", err, "Failed to deliver to client : ClientInfo[%s]", client.BaseInfo().String())
+		}
+
+		c.config.Trace.Trace(context, endTrace)
 	}
 
+	c.config.Log.Log(context, "SendToClient", "Completed")
 	return nil
 }
 
-func (c *TCPConn) Close() error {
+// Close ends the tcp connection handler and its internal clusters and clients.
+func (c *TCPConn) Close(context interface{}) error {
 	if !c.IsRunning() {
 		return nil
 	}
@@ -87,24 +154,35 @@ func (c *TCPConn) Close() error {
 	c.opWG.Wait()
 
 	c.mc.Lock()
-	if err := c.tcpClient.Close(); err != nil {
-		c.mc.Unlock()
-		return err
+
+	if c.tcpClient != nil {
+		if err := c.tcpClient.Close(); err != nil {
+			c.config.Log.Error(context, "Close", err, "Completed")
+			c.mc.Unlock()
+			return err
+		}
 	}
 
-	if err := c.tcpCluster.Close(); err != nil {
-		c.mc.Unlock()
-		return err
+	if c.tcpCluster != nil {
+		if err := c.tcpCluster.Close(); err != nil {
+			c.config.Log.Error(context, "Close", err, "Completed")
+			c.mc.Unlock()
+			return err
+		}
 	}
 
 	c.mc.Unlock()
 
 	for _, client := range c.clients {
-		client.Close("tcp.Close")
+		if err := client.Close("tcp.Close"); err != nil {
+			c.config.Log.Error(context, "Close", err, "Failed To Close Client")
+		}
 	}
 
 	for _, cluster := range c.clusters {
-		cluster.Close("tcp.Close")
+		if err := cluster.Close("tcp.Close"); err != nil {
+			c.config.Log.Error(context, "Close", err, "Failed To Close Cluster")
+		}
 	}
 
 	return nil

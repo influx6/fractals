@@ -8,6 +8,7 @@ import (
 // Provider defines a interface for a connection handler, which ensures
 // to manage the request-response cycle of a provided net.Conn.
 type Provider interface {
+	BaseInfo() BaseInfo
 	Close(context interface{}) error
 	SendMessage(context interface{}, msg []byte) error
 	CloseNotify() chan struct{}
