@@ -23,12 +23,6 @@ type Broadcast interface {
 	SendToClusters(context interface{}, msg []byte, flush bool) error
 }
 
-// ConnectionInfo provides a interfae which lists connected clients and clusters.
-type ConnectionInfo interface {
-	Clusters() []BaseInfo
-	Clients() []BaseInfo
-}
-
 // SearchableInfo defines a BaseInfo slice which allows querying specific data
 // from giving info.
 type SearchableInfo []BaseInfo
@@ -74,6 +68,14 @@ func (s SearchableInfo) HasInfo(target BaseInfo) bool {
 	return false
 }
 
+// Connections provides a interfae which lists connected clients and clusters.
+type Connections interface {
+	OnConnect(fn func(Provider))
+	OnDisconnect(fn func(Provider))
+	Clusters(context interface{}) SearchableInfo
+	Clients(context interface{}) SearchableInfo
+}
+
 // Connection defines a struct which stores the incoming request for a
 // connection.
 type Connection struct {
@@ -82,6 +84,8 @@ type Connection struct {
 	Config         Config
 	ServerInfo     BaseInfo
 	ConnectionInfo BaseInfo
+	Connections    Connections
+	BroadCaster    Broadcast
 	Stat           StatProvider
 }
 

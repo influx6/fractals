@@ -30,6 +30,9 @@ type TCPConn struct {
 	clients  []Provider
 	clusters []Provider
 
+	onConnects    []func(Provider)
+	onDisconnects []func(Provider)
+
 	runningClient  bool
 	runningCluster bool
 
@@ -70,6 +73,62 @@ func TCP(c Config) *TCPConn {
 	cn.config = c
 
 	return &cn
+}
+
+// Clients returns the list of available client connections.
+func (c *TCPConn) Clients(context interface{}) SearchableInfo {
+	var infoList []BaseInfo
+
+	c.mc.Lock()
+	for _, client := range c.clients {
+		infoList = append(infoList, client.BaseInfo())
+	}
+	c.mc.Unlock()
+
+	return SearchableInfo(infoList)
+}
+
+// OnDisonnect adds a function to be called on a connection disconnect.
+func (c *TCPConn) OnDisconnect(fn func(Provider)) {
+	c.mc.Lock()
+	c.onDisconnects = append(c.onDisconnects, fn)
+	c.mc.Unlock()
+}
+
+func (c *TCPConn) callDisconnects(p Provider) {
+	c.mc.Lock()
+	for _, cnFN := range c.onDisconnects {
+		cnFN(p)
+	}
+	c.mc.Unlock()
+}
+
+// OnConnect adds a function to be called on a new connection.
+func (c *TCPConn) OnConnect(fn func(Provider)) {
+	c.mc.Lock()
+	c.onConnects = append(c.onConnects, fn)
+	c.mc.Unlock()
+}
+
+func (c *TCPConn) callConnects(p Provider) {
+	c.mc.Lock()
+	for _, cnFN := range c.onConnects {
+		cnFN(p)
+	}
+	c.mc.Unlock()
+}
+
+// Clusters returns a list of available clusters connections.
+func (c *TCPConn) Clusters(context interface{}) SearchableInfo {
+	var infoList []BaseInfo
+
+	c.mc.Lock()
+	for _, cluster := range c.clusters {
+		infoList = append(infoList, cluster.BaseInfo())
+	}
+	c.mc.Unlock()
+
+	return SearchableInfo(infoList)
 }
 
 // SendToClusters sends the provided message to all clusters.
@@ -365,6 +424,8 @@ func (c *TCPConn) clusterLoop(context interface{}, h Handler, info BaseInfo) {
 					Config:         config,
 					ServerInfo:     info,
 					ConnectionInfo: connInfo,
+					BroadCaster:    c,
+					Connections:    c,
 					Stat:           stat,
 				}
 
@@ -375,6 +436,8 @@ func (c *TCPConn) clusterLoop(context interface{}, h Handler, info BaseInfo) {
 					Config:         config,
 					ServerInfo:     info,
 					ConnectionInfo: connInfo,
+					BroadCaster:    c,
+					Connections:    c,
 					Stat:           stat,
 				}
 
@@ -416,11 +479,14 @@ func (c *TCPConn) clusterLoop(context interface{}, h Handler, info BaseInfo) {
 			go func() {
 				<-provider.CloseNotify()
 				c.conWG.Done()
+				c.callDisconnects(provider)
 			}()
 
 			c.mc.Lock()
 			c.clusters = append(c.clusters, provider)
 			c.mc.Unlock()
+
+			c.callConnects(provider)
 
 			continue
 		}
@@ -515,6 +581,8 @@ func (c *TCPConn) clientLoop(context interface{}, h Handler, info BaseInfo) {
 					Config:         config,
 					ServerInfo:     info,
 					ConnectionInfo: connInfo,
+					BroadCaster:    c,
+					Connections:    c,
 					Stat:           stat,
 				}
 
@@ -525,6 +593,8 @@ func (c *TCPConn) clientLoop(context interface{}, h Handler, info BaseInfo) {
 					Config:         config,
 					ServerInfo:     info,
 					ConnectionInfo: connInfo,
+					BroadCaster:    c,
+					Connections:    c,
 					Stat:           stat,
 				}
 
@@ -566,11 +636,14 @@ func (c *TCPConn) clientLoop(context interface{}, h Handler, info BaseInfo) {
 			go func() {
 				<-provider.CloseNotify()
 				c.conWG.Done()
+				c.callDisconnects(provider)
 			}()
 
 			c.mc.Lock()
 			c.clients = append(c.clients, provider)
 			c.mc.Unlock()
+
+			c.callConnects(provider)
 
 			continue
 		}
