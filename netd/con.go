@@ -10,7 +10,7 @@ import (
 type Provider interface {
 	BaseInfo() BaseInfo
 	Close(context interface{}) error
-	SendMessage(context interface{}, msg []byte) error
+	SendMessage(context interface{}, msg []byte, flush bool) error
 	CloseNotify() chan struct{}
 }
 
@@ -19,8 +19,8 @@ type Provider interface {
 // expanding more details from a central controller or within a decentral
 // controller.
 type Broadcast interface {
-	SendToClients(context interface{}, msg []byte) error
-	SendToClusters(context interface{}, msg []byte) error
+	SendToClients(context interface{}, msg []byte, flush bool) error
+	SendToClusters(context interface{}, msg []byte, flush bool) error
 }
 
 // ConnectionInfo provides a interfae which lists connected clients and clusters.

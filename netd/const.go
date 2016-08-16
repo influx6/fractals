@@ -14,13 +14,16 @@ const (
 	// is available via the Addr() method.
 	RANDOM_PORT = -1
 
-	// MIN_DATA_SIZE defines the minimum buffer writer size to be recieved by
+	// MIN_DATA_WRITE_SIZE defines the minimum buffer writer size to be recieved by
 	// the connection readers.
-	MIN_DATA_SIZE = 512
+	MIN_DATA_WRITE_SIZE = 512
 
-	// MAX_DATA_SIZE defines the maximum buffer writer size and data size to be
+	// MAX_Data_WRITE_SIZE defines the maximum buffer writer size and data size to be
 	// allowed on the connection
-	MAX_DATA_SIZE = 6048
+	MAX_DATA_WRITE_SIZE = 6048
+
+	// DEFAULT_FLUSH_DEADLINE is the write/flush deadlines.
+	DEFAULT_FLUSH_DEADLINE = 2 * time.Second
 
 	// ACCEPT_MIN_SLEEP is the minimum acceptable sleep times on temporary errors.
 	ACCEPT_MIN_SLEEP = 10 * time.Millisecond

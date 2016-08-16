@@ -73,7 +73,7 @@ func TCP(c Config) *TCPConn {
 }
 
 // SendToClusters sends the provided message to all clusters.
-func (c *TCPConn) SendToClusters(context interface{}, msg []byte) error {
+func (c *TCPConn) SendToClusters(context interface{}, msg []byte, flush bool) error {
 	c.config.Log.Log(context, "SendToCluster", "Started : Data[%+s]", msg)
 
 	c.mc.Lock()
@@ -95,7 +95,7 @@ func (c *TCPConn) SendToClusters(context interface{}, msg []byte) error {
 		b = append(b, newLine)
 		c.config.Trace.Trace(context, bytes.Join(b, emptyString))
 
-		if err := cluster.SendMessage(context, msg); err != nil {
+		if err := cluster.SendMessage(context, msg, flush); err != nil {
 			c.config.Log.Error(context, "SendToCluster", err, "Failed to deliver to cluster : Cluster[%s]", cluster.BaseInfo().String())
 		}
 
@@ -107,7 +107,7 @@ func (c *TCPConn) SendToClusters(context interface{}, msg []byte) error {
 }
 
 // SendToClusters sends the provided message to all clients.
-func (c *TCPConn) SendToClients(context interface{}, msg []byte) error {
+func (c *TCPConn) SendToClients(context interface{}, msg []byte, flush bool) error {
 	c.config.Log.Log(context, "SendToClient", "Started : Data[%+s]", msg)
 
 	c.mc.Lock()
@@ -129,7 +129,7 @@ func (c *TCPConn) SendToClients(context interface{}, msg []byte) error {
 		b = append(b, newLine)
 		c.config.Trace.Trace(context, bytes.Join(b, emptyString))
 
-		if err := client.SendMessage(context, msg); err != nil {
+		if err := client.SendMessage(context, msg, flush); err != nil {
 			c.config.Log.Error(context, "SendToClient", err, "Failed to deliver to client : ClientInfo[%s]", client.BaseInfo().String())
 		}
 
@@ -392,7 +392,7 @@ func (c *TCPConn) clusterLoop(context interface{}, h Handler, info BaseInfo) {
 				providerAuth, ok := provider.(ClientAuth)
 				if !ok && c.config.MustAuthenticate {
 					config.Log.Error(context, "tcp.clusterLoop", err, " New Connection : Addr[%a] : Provider does not match ClientAuth interface", conn.RemoteAddr().String())
-					provider.SendMessage(context, []byte("Error: Provider has no authentication. Authentication needed"))
+					provider.SendMessage(context, []byte("Error: Provider has no authentication. Authentication needed"), true)
 					provider.Close(context)
 					continue
 				}
@@ -406,7 +406,7 @@ func (c *TCPConn) clusterLoop(context interface{}, h Handler, info BaseInfo) {
 					}
 
 					config.Log.Error(context, "tcp.clusterLoop", err, " New Connection : Addr[%a] : Provider does not match ClientAuth interface", conn.RemoteAddr().String())
-					provider.SendMessage(context, []byte("Error: Authentication failed"))
+					provider.SendMessage(context, []byte("Error: Authentication failed"), true)
 					provider.Close(context)
 					continue
 				}
@@ -542,7 +542,7 @@ func (c *TCPConn) clientLoop(context interface{}, h Handler, info BaseInfo) {
 				providerAuth, ok := provider.(ClientAuth)
 				if !ok && c.config.MustAuthenticate {
 					config.Log.Error(context, "tcp.clientLoop", err, " New Connection : Addr[%a] : Provider does not match ClientAuth interface", conn.RemoteAddr().String())
-					provider.SendMessage(context, []byte("Error: Provider has no authentication. Authentication needed"))
+					provider.SendMessage(context, []byte("Error: Provider has no authentication. Authentication needed"), true)
 					provider.Close(context)
 					continue
 				}
@@ -556,7 +556,7 @@ func (c *TCPConn) clientLoop(context interface{}, h Handler, info BaseInfo) {
 					}
 
 					config.Log.Error(context, "tcp.clientLoop", err, " New Connection : Addr[%a] : Provider does not match ClientAuth interface", conn.RemoteAddr().String())
-					provider.SendMessage(context, []byte("Error: Authentication failed"))
+					provider.SendMessage(context, []byte("Error: Authentication failed"), true)
 					provider.Close(context)
 					continue
 				}
