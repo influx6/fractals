@@ -35,24 +35,43 @@ type SearchableInfo []BaseInfo
 
 // GetInfosByIP searches if the giving address and port exists within the info list
 // returning the info that matches it.
-func (SearchableInfo) GetInfosByIP(ip string) ([]BaseInfo, error) {
+func (s SearchableInfo) GetInfosByIP(ip string) ([]BaseInfo, error) {
 	var infos []BaseInfo
+
+	for _, info := range s {
+		if info.IP != ip {
+			continue
+		}
+
+		infos = append(infos, info)
+	}
 
 	return infos, nil
 }
 
 // GetAddr searches if the giving address and port exists within the info list
 // returning the info that matches it.
-func (SearchableInfo) HasAddr(addr string, port int) (BaseInfo, error) {
+func (s SearchableInfo) HasAddr(addr string, port int) (BaseInfo, error) {
 	var info BaseInfo
+
+	for _, info = range s {
+		if info.Addr == addr || info.Port == port {
+			break
+		}
+	}
 
 	return info, nil
 }
 
 // HasInfo returns true if the info exists within the lists.
-func (SearchableInfo) HasInfo(info BaseInfo) bool {
+func (s SearchableInfo) HasInfo(target BaseInfo) bool {
+	for _, info := range s {
+		if info.Addr == target.Addr && info.Port == target.Port {
+			return true
+		}
+	}
 
-	return true
+	return false
 }
 
 // Connection defines a struct which stores the incoming request for a
