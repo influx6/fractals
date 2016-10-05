@@ -288,17 +288,17 @@ func setIndex(target interface{}, index int, val interface{}) error {
 		return nil
 	case []string:
 		if len(mo) <= index {
-			return nil, ErrIndexOutOfBound
+			return ErrIndexOutOfBound
 		}
 
 		mo[index] = val.(string)
 	case []int:
 		if len(mo) <= index {
-			return nil, ErrIndexOutOfBound
-			return nil
+			return ErrIndexOutOfBound
 		}
 
 		mo[index] = val.(int)
+		return nil
 	case []float64:
 		if len(mo) <= index {
 			return nil, ErrIndexOutOfBound
@@ -308,35 +308,35 @@ func setIndex(target interface{}, index int, val interface{}) error {
 		return nil
 	case []float32:
 		if len(mo) <= index {
-			return nil, ErrIndexOutOfBound
+			return ErrIndexOutOfBound
 		}
 
 		mo[index] = val.(float32)
 		return nil
 	case []uint:
 		if len(mo) <= index {
-			return nil, ErrIndexOutOfBound
+			return ErrIndexOutOfBound
 		}
 
 		mo[index] = val.(uint)
 		return nil
 	case []uint16:
 		if len(mo) <= index {
-			return nil, ErrIndexOutOfBound
+			return ErrIndexOutOfBound
 		}
 
 		mo[index] = val.(uint16)
 		return nil
 	case []uint32:
 		if len(mo) <= index {
-			return nil, ErrIndexOutOfBound
+			return ErrIndexOutOfBound
 		}
 
 		mo[index] = val.(uint32)
 		return nil
 	case []uint64:
 		if len(mo) <= index {
-			return nil, ErrIndexOutOfBound
+			return ErrIndexOutOfBound
 		}
 
 		mo[index] = val.(uint64)
