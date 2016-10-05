@@ -45,6 +45,37 @@ func Find(path string) fractals.Handler {
 	return fractals.Lift(finders...)(nil)
 }
 
+// Save runs down the providded map attempting to retrieve the giving value and
+// root else returning an error as failure to retrieve the giving path.
+func Save(path string, val interface{}) fractals.Handler {
+
+	var finders []fractals.Handler
+
+	keys := Keys(path)
+
+	head := keys[len(keys)-1]
+	keys = keys[:len(keys)-1]
+
+	for _, key := range keys {
+		switch ikey := key.(type) {
+		case int:
+			finders = append(finders, FindInList(ikey))
+		case string:
+			finders = append(finders, FindInMap(ikey))
+		}
+	}
+
+	if rh, ok := head.(string); ok {
+		finders = append(finders, AddInToMap(rh, val))
+	}
+
+	if rh, ok := head.(int); ok {
+		finders = append(finders, AddInToList(rh, val))
+	}
+
+	return fractals.Lift(finders...)(nil)
+}
+
 // ErrKeyNotFound is returned when the key desired to be retrieved is not found.
 var ErrKeyNotFound = errors.New("Key not found")
 
@@ -61,6 +92,30 @@ func FindInMap(key string) fractals.Handler {
 func FindKeyInMap(target interface{}) fractals.Handler {
 	return fractals.MustWrap(func(key string) (interface{}, error) {
 		return getValue(target, key)
+	})
+}
+
+// AddInToMap finds the provided key in incoming maps returning the value if found,
+// else returning an error instead.
+func AddInToMap(key string, val interface{}) fractals.Handler {
+	return fractals.MustWrap(func(target interface{}) (interface{}, error) {
+		if err := setValue(target, key, val); err != nil {
+			return nil, err
+		}
+
+		return val, nil
+	})
+}
+
+// AddIntoKeyInMap finds the incoming key in provided map, returning the value if found,
+// else returning an error instead.
+func AddIntoKeyInMap(target interface{}, val interface{}) fractals.Handler {
+	return fractals.MustWrap(func(key string) (interface{}, error) {
+		if err := setValue(target, key, val); err != nil {
+			return nil, err
+		}
+
+		return val, nil
 	})
 }
 
@@ -126,11 +181,35 @@ func FindInList(index int) fractals.Handler {
 	})
 }
 
-// FindKeyInMap finds the incoming key in provided map, returning the value if found,
+// FindIndexInList finds the incoming key in provided map, returning the value if found,
 // else returning an error instead.
 func FindIndexInList(target interface{}) fractals.Handler {
 	return fractals.MustWrap(func(index int) (interface{}, error) {
 		return getIndex(target, index)
+	})
+}
+
+// AddInToList finds the provided index in incoming maps returning the value if found,
+// else returning an error instead.
+func AddInToList(index int, val interface{}) fractals.Handler {
+	return fractals.MustWrap(func(target interface{}) (interface{}, error) {
+		if err := setIndex(target, index, val); err != nil {
+			return nil, err
+		}
+
+		return val, nil
+	})
+}
+
+// AddToIndexInList finds the incoming key in provided map, returning the value if found,
+// else returning an error instead.
+func AddToIndexInList(target interface{}, val interface{}) fractals.Handler {
+	return fractals.MustWrap(func(index int) (interface{}, error) {
+		if err := setIndex(target, index, val); err != nil {
+			return nil, err
+		}
+
+		return val, nil
 	})
 }
 
@@ -248,6 +327,7 @@ func setIndex(target interface{}, index int, val interface{}) error {
 		}
 
 		mo[index] = val.(map[string]uint)
+		return nil
 
 	case []map[string]string:
 		if len(mo) <= index {
@@ -259,7 +339,7 @@ func setIndex(target interface{}, index int, val interface{}) error {
 
 	case []map[string]interface{}:
 		if len(mo) <= index {
-			return nil, ErrIndexOutOfBound
+			return ErrIndexOutOfBound
 		}
 
 		mo[index] = val.(map[string]interface{})
@@ -267,21 +347,21 @@ func setIndex(target interface{}, index int, val interface{}) error {
 
 	case []interface{}:
 		if len(mo) <= index {
-			return nil, ErrIndexOutOfBound
+			return ErrIndexOutOfBound
 		}
 
 		mo[index] = val
 		return nil
 	case []rune:
 		if len(mo) <= index {
-			return nil, ErrIndexOutOfBound
+			return ErrIndexOutOfBound
 		}
 
 		mo[index] = val.(rune)
 		return nil
 	case []byte:
 		if len(mo) <= index {
-			return nil, ErrIndexOutOfBound
+			return ErrIndexOutOfBound
 		}
 
 		mo[index] = val.(byte)
@@ -292,6 +372,8 @@ func setIndex(target interface{}, index int, val interface{}) error {
 		}
 
 		mo[index] = val.(string)
+		return nil
+
 	case []int:
 		if len(mo) <= index {
 			return ErrIndexOutOfBound
@@ -301,7 +383,7 @@ func setIndex(target interface{}, index int, val interface{}) error {
 		return nil
 	case []float64:
 		if len(mo) <= index {
-			return nil, ErrIndexOutOfBound
+			return ErrIndexOutOfBound
 		}
 
 		mo[index] = val.(float64)
