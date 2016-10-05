@@ -16,6 +16,9 @@ import (
 )
 
 var (
+	// ErrInvalidType is returned when the type does not match.
+	ErrInvalidType = errors.New("Type does not match function type")
+
 	errorType = reflect.TypeOf((*error)(nil)).Elem()
 	boolType  = reflect.TypeOf((*bool)(nil)).Elem()
 	ctxType   = reflect.TypeOf((*context.Context)(nil)).Elem()
@@ -65,7 +68,7 @@ func MustWrap(node interface{}) Handler {
 func Wrap(node interface{}) Handler {
 	var hl Handler
 
-	switch node.(type) {
+	switch mh := node.(type) {
 	case Handler:
 		hl = node.(Handler)
 	case func():
@@ -104,6 +107,15 @@ func Wrap(node interface{}) Handler {
 
 			return d, err
 		}
+	case func(interface{}) (interface{}, error):
+		hl = func(ctx context.Context, err error, d interface{}) (interface{}, error) {
+			if err != nil {
+				return nil, err
+			}
+
+			return mh(d)
+		}
+
 	case func(interface{}) interface{}:
 		hl = wrapDataOnly(node.(func(interface{}) interface{}))
 	case func(interface{}):
@@ -211,7 +223,6 @@ func Wrap(node interface{}) Handler {
 			if !useContext && !useData && !useErr {
 				resArgs = tm.Call(nil)
 			} else {
-				// fmt.Printf("%t:%t:%t -> %+s:%+s\n", useContext, useErr, useData, err, data)
 				if isCustom && !useErr && err != nil {
 					return nil, err
 				}
@@ -231,7 +242,7 @@ func Wrap(node interface{}) Handler {
 
 				// If data does not match then skip this fall.
 				if breakOfData && len(fnArgs) < 1 {
-					return nil, nil
+					return nil, ErrInvalidType
 				}
 
 				if !breakOfData {
@@ -615,12 +626,12 @@ func MagicApplier(handle interface{}) SubApplier {
 			if !useOne {
 				can, convert := reflection.CanSetFor(d1, dv1)
 				if !can {
-					return nil, errors.New("Invalid Type Recieved")
+					return nil, ErrInvalidType
 				}
 
 				can2, convert2 := reflection.CanSetFor(d2, dv2)
 				if !can2 {
-					return nil, errors.New("Invalid Type Recieved")
+					return nil, ErrInvalidType
 				}
 
 				if convert {
@@ -865,6 +876,50 @@ func Distribute(lifts ...Handler) LiftHandler {
 
 			for _, lh := range lifts {
 				lh(ctx, e1, m1)
+			}
+
+			return m1, e1
+		}
+	}
+}
+
+// ErrUntilFailed is returned when no handler was found to handle the provided arguments.
+var ErrUntilFailed = errors.New("No Handler Found")
+
+// Until  takes the output from the handler passed in and distributes it against the initially provided
+// set of Handlers until it finds the one which returns a non-error value and passes the returned
+// value as the result. It will ignore the rest of the handlers if it finds the winner which does not
+// return a error. If all return an error then it will return the returned values from the handle. If no
+// error is recieved then it returns ErrUntilFailed as error.
+func Until(lifts ...Handler) LiftHandler {
+
+	// We will stack the handlers where one outputs becomes the input of the next.
+	return func(handle interface{}) Handler {
+		var mh Handler
+
+		if handle != nil {
+			mh = Wrap(handle)
+			if mh == nil {
+				panic("Expected handle passed into be a function")
+			}
+		} else {
+			mh = IdentityHandler()
+		}
+
+		return func(ctx context.Context, err error, data interface{}) (interface{}, error) {
+			m1, e1 := mh(ctx, err, data)
+
+			for _, lh := range lifts {
+				res, err := lh(ctx, e1, m1)
+				if err != nil {
+					continue
+				}
+
+				return res, nil
+			}
+
+			if e1 == nil {
+				return m1, ErrUntilFailed
 			}
 
 			return m1, e1
