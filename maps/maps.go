@@ -52,19 +52,7 @@ var ErrKeyNotFound = errors.New("Key not found")
 // else returning an error instead.
 func FindInMap(key string) fractals.Handler {
 	return fractals.MustWrap(func(target interface{}) (interface{}, error) {
-		switch to := target.(type) {
-		case map[string]string:
-			if item, ok := to[key]; ok {
-				return item, nil
-			}
-
-		case map[string]interface{}:
-			if item, ok := to[key]; ok {
-				return item, nil
-			}
-		}
-
-		return nil, ErrKeyNotFound
+		return getValue(target, key)
 	})
 }
 
@@ -72,20 +60,59 @@ func FindInMap(key string) fractals.Handler {
 // else returning an error instead.
 func FindKeyInMap(target interface{}) fractals.Handler {
 	return fractals.MustWrap(func(key string) (interface{}, error) {
-		switch to := target.(type) {
-		case map[string]string:
-			if item, ok := to[key]; ok {
-				return item, nil
-			}
+		return getValue(target, key)
+	})
+}
 
-		case map[string]interface{}:
-			if item, ok := to[key]; ok {
-				return item, nil
-			}
+func getValue(target interface{}, key interface{}) (interface{}, error) {
+	switch to := target.(type) {
+	case map[interface{}]interface{}:
+		if item, ok := to[key]; ok {
+			return item, nil
 		}
 
-		return nil, ErrKeyNotFound
-	})
+	case map[interface{}]string:
+		if item, ok := to[key]; ok {
+			return item, nil
+		}
+	case map[string]string:
+		if item, ok := to[key.(string)]; ok {
+			return item, nil
+		}
+
+	case map[string]interface{}:
+		if item, ok := to[key.(string)]; ok {
+			return item, nil
+		}
+	}
+
+	return nil, ErrKeyNotFound
+}
+
+// ErrTypeNotFound is returned when the giving type is either unknown or does not
+// match their lists.
+var ErrTypeNotFound = errors.New("Type not found or unknown")
+
+func setValue(target interface{}, key interface{}, val interface{}) error {
+	switch to := target.(type) {
+	case map[interface{}]interface{}:
+		to[key] = val
+		return nil
+
+	case map[interface{}]string:
+		to[key] = val.(string)
+		return nil
+
+	case map[string]string:
+		to[key.(string)] = val.(string)
+		return nil
+
+	case map[string]interface{}:
+		to[key.(string)] = val
+		return nil
+	}
+
+	return ErrTypeNotFound
 }
 
 // ErrIndexOutOfBound returns this when  hte provided index is out of bounds/
@@ -95,101 +122,7 @@ var ErrIndexOutOfBound = errors.New("Index is out of bound")
 // else returning an error instead.
 func FindInList(index int) fractals.Handler {
 	return fractals.MustWrap(func(target interface{}) (interface{}, error) {
-		switch mo := target.(type) {
-		case []map[uint]string:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-
-		case []map[string]uint:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []map[string]string:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []map[string]interface{}:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []interface{}:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []rune:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []byte:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []string:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []int:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []float64:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []float32:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []uint:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []uint16:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []uint32:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []uint64:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		}
-
-		return nil, ErrKeyNotFound
+		return getIndex(target, index)
 	})
 }
 
@@ -197,87 +130,218 @@ func FindInList(index int) fractals.Handler {
 // else returning an error instead.
 func FindIndexInList(target interface{}) fractals.Handler {
 	return fractals.MustWrap(func(index int) (interface{}, error) {
-		switch mo := target.(type) {
-		case []map[string]string:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
+		return getIndex(target, index)
+	})
+}
 
-			return mo[index], nil
-		case []map[string]interface{}:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []interface{}:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []rune:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []byte:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []string:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []int:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []float64:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []float32:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []uint:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []uint16:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []uint32:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
-		case []uint64:
-			if len(mo) <= index {
-				return nil, ErrIndexOutOfBound
-			}
-
-			return mo[index], nil
+func getIndex(target interface{}, index int) (interface{}, error) {
+	switch mo := target.(type) {
+	case []map[uint]string:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
 		}
 
-		return nil, ErrKeyNotFound
-	})
+		return mo[index], nil
+
+	case []map[string]uint:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		return mo[index], nil
+	case []map[string]string:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		return mo[index], nil
+	case []map[string]interface{}:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		return mo[index], nil
+	case []interface{}:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		return mo[index], nil
+	case []rune:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		return mo[index], nil
+	case []byte:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		return mo[index], nil
+	case []string:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		return mo[index], nil
+	case []int:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		return mo[index], nil
+	case []float64:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		return mo[index], nil
+	case []float32:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		return mo[index], nil
+	case []uint:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		return mo[index], nil
+	case []uint16:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		return mo[index], nil
+	case []uint32:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		return mo[index], nil
+	case []uint64:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		return mo[index], nil
+	}
+
+	return nil, ErrKeyNotFound
+}
+
+func setIndex(target interface{}, index int, val interface{}) error {
+	switch mo := target.(type) {
+	case []map[uint]string:
+		if len(mo) <= index {
+			return ErrIndexOutOfBound
+		}
+
+		mo[index] = val.(map[uint]string)
+		return nil
+
+	case []map[string]uint:
+		if len(mo) <= index {
+			return ErrIndexOutOfBound
+		}
+
+		mo[index] = val.(map[string]uint)
+
+	case []map[string]string:
+		if len(mo) <= index {
+			return ErrIndexOutOfBound
+		}
+
+		mo[index] = val.(map[string]string)
+		return nil
+
+	case []map[string]interface{}:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		mo[index] = val.(map[string]interface{})
+		return nil
+
+	case []interface{}:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		mo[index] = val
+		return nil
+	case []rune:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		mo[index] = val.(rune)
+		return nil
+	case []byte:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		mo[index] = val.(byte)
+		return nil
+	case []string:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		mo[index] = val.(string)
+	case []int:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+			return nil
+		}
+
+		mo[index] = val.(int)
+	case []float64:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		mo[index] = val.(float64)
+		return nil
+	case []float32:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		mo[index] = val.(float32)
+		return nil
+	case []uint:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		mo[index] = val.(uint)
+		return nil
+	case []uint16:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		mo[index] = val.(uint16)
+		return nil
+	case []uint32:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		mo[index] = val.(uint32)
+		return nil
+	case []uint64:
+		if len(mo) <= index {
+			return nil, ErrIndexOutOfBound
+		}
+
+		mo[index] = val.(uint64)
+		return nil
+	}
+
+	return ErrTypeNotFound
 }
