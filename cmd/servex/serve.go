@@ -30,7 +30,7 @@ func main(){
   flag.StringVar(&addrs,"addrs",":4050", "addrs: The address and port to use for the http server.")
   flag.StringVar(&basePath,"base",pwd, "base: This values sets the path to be loaded as the base path.\n\t")
   flag.StringVar(&assetPath,"assets",defaultAssets, "assets: sets the absolute path to use for assets.\n\t")
-  flag.BoolVar(&hasIndexFile,"withIndex",false, "withIndex: Indicates whether we should serve index.html as root path.")
+  flag.BoolVar(&hasIndexFile,"withIndex",true, "withIndex: Indicates whether we should serve index.html as root path.")
   flag.Parse()
 
   basePath = filepath.Clean(basePath)
