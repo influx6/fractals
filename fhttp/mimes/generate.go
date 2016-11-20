@@ -161,6 +161,8 @@ func AddExtensionType(ext string, typed string, references ...string){
 }
 
 func init() {
+  AddExtensionType("go","application/go+source","http://golang.org")
+
 %+s
 }
 
