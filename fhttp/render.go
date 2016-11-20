@@ -143,6 +143,7 @@ func RenderError(err error, r *http.Request, w http.ResponseWriter) {
 // RenderResponseError renders the giving error as a json response to the
 // passed ResponseRequest object.
 func RenderResponseError(err error, r *Request) {
+	fmt.Printf("RenderResError: %+s  -> %s\n", err, r.Req)
 	Render(http.StatusBadRequest, r.Req, r.Res, JSONError{Error: err.Error()})
 }
 
