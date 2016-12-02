@@ -300,7 +300,6 @@ func (e Endpoint) handlerFunc(globalBeforeWM, globalAfterWM DriveMiddleware) fun
 			}
 		}
 
-
 		// Run local middleware second and receive its return values.
 		if localWM != nil {
 			_, err := localWM(ctx, rw)

@@ -90,9 +90,33 @@ func (r *Request) Respond(code int, data interface{}) {
 	Render(code, r.Req, r.Res, data)
 }
 
+// RespondAny renders out a JSON response and status code giving using the Render
+// function.
+func (r *Request) RespondAny(code int, content string, data []byte) {
+	RenderAny(code, r.Req, r.Res, content, data)
+}
+
 // RespondError renders out a error response into the request object.
 func (r *Request) RespondError(code int, err error) {
 	RenderErrorWithStatus(code, err, r.Req, r.Res)
+}
+
+// RenderAny writes the giving data into the response as JSON.
+func RenderAny(code int, r *http.Request, w http.ResponseWriter, content string, data []byte) {
+	if code == http.StatusNoContent {
+		w.WriteHeader(code)
+		return
+	}
+
+	w.Header().Set("Content-Type", content)
+	w.WriteHeader(code)
+
+	if cb := r.URL.Query().Get("callback"); cb != "" {
+		io.WriteString(w, cb+"("+string(data)+")")
+		return
+	}
+
+	w.Write(data)
 }
 
 // Render writes the giving data into the response as JSON.
