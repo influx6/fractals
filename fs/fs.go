@@ -361,8 +361,8 @@ func ResolvePathIn(rootDir string) fractals.Handler {
 		rootPath := filepath.Clean(absRoot)
 		finalPath := filepath.Clean(filepath.Join(rootDir, path))
 
-		if strings.Contains(finalPath, rootPath) {
-			return nil, fmt.Errorf("%q not within %q root", path, rootDir)
+		if !strings.Contains(finalPath, rootPath) {
+			return nil, fmt.Errorf("Path is outside of root {Root: %q, Path: %q, Wanted: %q}", rootDir, path, finalPath)
 		}
 
 		file, err := os.Open(finalPath)
@@ -391,8 +391,8 @@ func ResolvePathStringIn(rootDir string) fractals.Handler {
 		rootPath := filepath.Clean(absRoot)
 		finalPath := filepath.Clean(filepath.Join(rootDir, path))
 
-		if strings.Contains(finalPath, rootPath) {
-			return "", fmt.Errorf("%q not within %q root", path, rootDir)
+		if !strings.Contains(finalPath, rootPath) {
+			return "", fmt.Errorf("Path is outside of root {Root: %q, Path: %q, Wanted: %q}", rootDir, path, finalPath)
 		}
 
 		return finalPath, nil

@@ -245,6 +245,12 @@ func (hd *HTTPDrive) ServeTLS(addr string, certFile string, keyFile string) {
 	LaunchHTTPS(addr, certFile, keyFile, hd)
 }
 
+// MW returns the giving lists of passed in middleware, it is provided as
+// as a convenience function.
+func MW(md ...DriveMiddleware) []DriveMiddleware {
+	return md
+}
+
 // NewHTTP returns a new instance of the HTTPDrive struct.
 func NewHTTP(before []DriveMiddleware, after []DriveMiddleware) *HTTPDrive {
 	var drive HTTPDrive
@@ -286,24 +292,21 @@ func (e Endpoint) handlerFunc(globalBeforeWM, globalAfterWM DriveMiddleware) fun
 		}
 
 		// Run the global middleware first and recieve its returned values.
-		var err error
 		if globalBeforeWM != nil {
-			rw, err = globalBeforeWM(ctx, rw)
-		}
-
-		if err != nil && !rw.Res.DataWritten() {
-			RenderResponseError(err, rw)
-			return
+			_, err := globalBeforeWM(ctx, rw)
+			if err != nil && !rw.Res.DataWritten() {
+				RenderResponseError(err, rw)
+				return
+			}
 		}
 
 		// Run local middleware second and receive its return values.
 		if localWM != nil {
-			rw, err = localWM(ctx, rw)
-		}
-
-		if err != nil && !rw.Res.DataWritten() {
-			RenderResponseError(err, rw)
-			return
+			_, err := localWM(ctx, rw)
+			if err != nil && !rw.Res.DataWritten() {
+				RenderResponseError(err, rw)
+				return
+			}
 		}
 
 		if werr := action(ctx, rw); werr != nil && !rw.Res.DataWritten() {
@@ -312,22 +315,21 @@ func (e Endpoint) handlerFunc(globalBeforeWM, globalAfterWM DriveMiddleware) fun
 		}
 
 		if afterWM != nil {
-			rw, err = afterWM(ctx, rw)
-		}
-
-		if err != nil && !rw.Res.DataWritten() {
-			RenderResponseError(err, rw)
-			return
+			_, err := afterWM(ctx, rw)
+			if err != nil && !rw.Res.DataWritten() {
+				RenderResponseError(err, rw)
+				return
+			}
 		}
 
 		if globalAfterWM != nil {
-			rw, err = globalAfterWM(ctx, rw)
+			_, err := globalAfterWM(ctx, rw)
+			if err != nil && !rw.Res.DataWritten() {
+				RenderResponseError(err, rw)
+				return
+			}
 		}
 
-		if err != nil && !rw.Res.DataWritten() {
-			RenderResponseError(err, rw)
-			return
-		}
 	}
 }
 
