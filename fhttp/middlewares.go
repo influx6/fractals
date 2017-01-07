@@ -91,7 +91,20 @@ func IndexServer(dir string, index string, prefix string) fractals.Handler {
 
 // FileServer returns a handler capable of serving different files from the provided
 // directory but using inputed URL path.
-func FileServer(dir string, prefix string) fractals.Handler {
+func FileServer(file string) fractals.Handler {
+	return fractals.SubLift(func(rw *Request, data []byte) (*Request, error) {
+		if _, err := rw.Res.Write(data); err != nil {
+			return nil, err
+		}
+
+		return rw, nil
+	}, IdentityMiddlewareHandler(), fractals.Replay(file), MimeWriter(),
+		fs.ReadFile())
+}
+
+// DirFileServer returns a handler capable of serving different files from the provided
+// directory but using inputed URL path.
+func DirFileServer(dir string, prefix string) fractals.Handler {
 	var stripper fractals.Handler
 
 	if prefix != "" {
