@@ -3,6 +3,7 @@ package fhttp
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -86,6 +87,7 @@ func Headers(h map[string]string) fractals.Handler {
 // LaunchHTTP lunches a http server, setting up the signal handler needed.
 func LaunchHTTP(addr string, mux http.Handler) {
 	go func() {
+		fmt.Printf("HTTP Server starting... {Addr: %q}", addr)
 		http.ListenAndServe(addr, mux)
 	}()
 
@@ -98,6 +100,7 @@ func LaunchHTTP(addr string, mux http.Handler) {
 // LaunchHTTPS lunches a http server, setting up the signal handler needed.
 func LaunchHTTPS(addr string, tlsKey string, tlsCert string, mux http.Handler) {
 	go func() {
+		fmt.Printf("HTTPS Server starting... {Addr: %q}", addr)
 		http.ListenAndServeTLS(addr, tlsCert, tlsKey, mux)
 	}()
 
