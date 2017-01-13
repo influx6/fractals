@@ -45,7 +45,7 @@ func LogWith(w io.Writer, behave func(io.Writer, *Request)) fractals.Handler {
 func ResponseLogger(w io.Writer) fractals.Handler {
 	return LogWith(w, func(ws io.Writer, rw *Request) {
 		now := time.Now().UTC()
-		content := rw.Req.Header.Get("Content-Type")
+		content := rw.Res.Header().Get("Content-Type")
 		fmt.Fprintf(ws, "HTTP : %q : Content{%s} : Status{%d} : URI{%s} : DataSize{%d}\n", now, content, rw.Res.Status(), rw.Req.URL, rw.Res.Size())
 	})
 }
