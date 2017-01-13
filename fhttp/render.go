@@ -120,9 +120,13 @@ func RenderAny(code int, r *http.Request, w http.ResponseWriter, content string,
 }
 
 // Render writes the giving data into the response as JSON.
-func Render(code int, r *http.Request, w http.ResponseWriter, data interface{}) {
-	if code == http.StatusNoContent {
+func Render(code int, r *http.Request, w ResponseWriter, data interface{}) {
+	if !w.StatusWritten() && code == http.StatusNoContent {
 		w.WriteHeader(code)
+		return
+	}
+
+	if w.DataWritten() {
 		return
 	}
 
@@ -156,12 +160,12 @@ func RenderResponseErrorWithStatus(status int, err error, r *Request) {
 
 // RenderErrorWithStatus renders the giving error as a json response.
 func RenderErrorWithStatus(status int, err error, r *http.Request, w http.ResponseWriter) {
-	Render(status, r, w, JSONError{Error: err.Error()})
+	Render(status, r, NewResponseWriter(w), JSONError{Error: err.Error()})
 }
 
 // RenderError renders the giving error as a json response.
 func RenderError(err error, r *http.Request, w http.ResponseWriter) {
-	Render(http.StatusBadRequest, r, w, JSONError{Error: err.Error()})
+	Render(http.StatusBadRequest, r, NewResponseWriter(w), JSONError{Error: err.Error()})
 }
 
 // RenderResponseError renders the giving error as a json response to the
@@ -207,11 +211,14 @@ func (rw *responseWriter) WriteHeader(s int) {
 }
 
 func (rw *responseWriter) Write(b []byte) (int, error) {
-
 	// The status will be StatusOK if WriteHeader has not been called yet
 	if !rw.StatusWritten() {
 		rw.WriteHeader(http.StatusOK)
 	}
+
+	// if atomic.LoadInt64(&rw.datawrite) == 1 {
+	// 	return len(b), nil
+	// }
 
 	atomic.StoreInt64(&rw.datawrite, 1)
 

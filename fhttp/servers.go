@@ -313,20 +313,20 @@ func (e Endpoint) handlerFunc(globalBeforeWM, globalAfterWM DriveMiddleware) fun
 			_, err := localWM(ctx, rw)
 			if err != nil && !rw.Res.DataWritten() {
 				RenderResponseError(err, rw)
-				return
+				// return
 			}
 		}
 
 		if werr := action(ctx, rw); werr != nil && !rw.Res.DataWritten() {
 			RenderResponseError(werr, rw)
-			return
+			// return
 		}
 
 		if afterWM != nil {
 			_, err := afterWM(ctx, rw)
 			if err != nil && !rw.Res.DataWritten() {
 				RenderResponseError(err, rw)
-				return
+				// return
 			}
 		}
 
@@ -334,7 +334,7 @@ func (e Endpoint) handlerFunc(globalBeforeWM, globalAfterWM DriveMiddleware) fun
 			_, err := globalAfterWM(ctx, rw)
 			if err != nil && !rw.Res.DataWritten() {
 				RenderResponseError(err, rw)
-				return
+				// return
 			}
 		}
 
