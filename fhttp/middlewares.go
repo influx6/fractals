@@ -109,7 +109,7 @@ func FileServer(file string) fractals.Handler {
 		}
 
 		return rw, nil
-	}, IdentityMiddlewareHandler(), fractals.Replay(file), MimeWriter(),
+	}, IdentityMiddlewareHandler(), MimeWriterFor(file), fractals.Replay(file),
 		fs.ReadFile())
 }
 
