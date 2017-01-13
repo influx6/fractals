@@ -245,19 +245,27 @@ func (hd *HTTPDrive) ServeTLS(addr string, certFile string, keyFile string) {
 	LaunchHTTPS(addr, certFile, keyFile, hd)
 }
 
-// MW returns the giving lists of passed in middleware, it is provided as
+// DriveMW returns the giving lists of passed in middleware, it is provided as
 // as a convenience function.
-func MW(md ...DriveMiddleware) []DriveMiddleware {
+func DriveMW(md ...DriveMiddleware) []DriveMiddleware {
 	return md
 }
 
-// NewHTTP returns a new instance of the HTTPDrive struct.
-func NewHTTP(before []DriveMiddleware, after []DriveMiddleware) *HTTPDrive {
-	var drive HTTPDrive
-	drive.TreeMux = httptreemux.New()
-	drive.globalMW = LiftWM(before...)
-	drive.globalMWAfter = LiftWM(after...)
-	return &drive
+// MW returns the giving lists of passed in middleware, it is provided as
+// as a convenience function.
+func MW(md ...fractals.Handler) DriveMiddleware {
+	return WrapMiddleware(md...)
+}
+
+// Drive returns a new partial function which returns a instance of the HTTPDrive struct.
+func Drive(before ...DriveMiddleware) func(...DriveMiddleware) *HTTPDrive {
+	return func(after ...DriveMiddleware) *HTTPDrive {
+		var drive HTTPDrive
+		drive.TreeMux = httptreemux.New()
+		drive.globalMW = LiftWM(before...)
+		drive.globalMWAfter = LiftWM(after...)
+		return &drive
+	}
 }
 
 // Endpoint defines a struct for registering router paths with the HTTPDrive router.

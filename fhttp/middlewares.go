@@ -3,7 +3,6 @@ package fhttp
 import (
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -34,23 +33,35 @@ func MimeWriterFor(file string) fractals.Handler {
 
 // LogWith returns a Handler which logs to the provided Writer details of the
 // http request.
-func LogWith(w io.Writer) fractals.Handler {
+func LogWith(w io.Writer, behave func(io.Writer, *Request)) fractals.Handler {
 	return fractals.MustWrap(func(rw *Request) *Request {
-		now := time.Now().UTC()
-		content := rw.Req.Header.Get("Accept")
-
-		if !rw.Res.StatusWritten() {
-			fmt.Fprintf(w, "HTTP : %q : Content{%s} : Method{%s} : URI{%s}\n", now, content, rw.Req.Method, rw.Req.URL)
-		} else {
-			fmt.Fprintf(w, "HTTP : %q : Status{%d} : Content{%s} : Method{%s} : URI{%s}\n", now, rw.Res.Status(), rw.Res.Header().Get("Content-Type"), rw.Req.Method, rw.Req.URL)
-		}
+		behave(w, rw)
 		return rw
 	})
 }
 
-// Logger returns a Handler which logs out the incoming http requests.
-func Logger() fractals.Handler {
-	return LogWith(os.Stdout)
+// ResponseLogger provides a logger which logs the initial request of the
+// incoming request.
+func ResponseLogger(w io.Writer) fractals.Handler {
+	return LogWith(w, func(ws io.Writer, rw *Request) {
+		now := time.Now().UTC()
+		content := rw.Req.Header.Get("Content-Type")
+		fmt.Fprintf(ws, "HTTP : %q : Content{%s} : Status{%d} : URI{%s} : DataWrittenSize{%q}\n", now, content, rw.Res.Status(), rw.Req.URL, rw.Res.Size())
+	})
+}
+
+// RequestLogger provides a logger which logs the initial request of the
+// incoming request.
+func RequestLogger(w io.Writer) fractals.Handler {
+	return LogWith(w, func(ws io.Writer, rw *Request) {
+		now := time.Now().UTC()
+		content := rw.Req.Header.Get("Accept")
+		if !rw.Res.StatusWritten() {
+			fmt.Fprintf(ws, "HTTP : %q : Content{%s} : Method{%s} : URI{%s}\n", now, content, rw.Req.Method, rw.Req.URL)
+		} else {
+			fmt.Fprintf(ws, "HTTP : %q : Status{%d} : Content{%s} : Method{%s} : URI{%s}\n", now, rw.Res.Status(), rw.Res.Header().Get("Content-Type"), rw.Req.Method, rw.Req.URL)
+		}
+	})
 }
 
 // PathName returns the path of the received *Request.
