@@ -1235,62 +1235,6 @@ func WrapStreamHandler(h interface{}) StreamHandler {
 	}
 }
 
-// Stream defines a interface which exposes a stream that allows continous
-// data to be send down the pipeline.
-type Stream interface {
-	Emit(context.Context, interface{}, bool) interface{}
-	Stream(interface{}) Stream
-}
-
-// MustSteram returns a new Stream using the handler it receives.
-func MustStream(handler interface{}) Stream {
-	hs := WrapStreamHandler(handler)
-	if hs == nil {
-		panic("Argument is not a StreamHandler")
-	}
-
-	var sm stream
-	sm.main = hs
-	return &sm
-}
-
-type stream struct {
-	main StreamHandler
-	next Stream
-}
-
-// Emit calls the next handler in the stream connection.
-func (s *stream) Emit(ctx context.Context, data interface{}, end bool) interface{} {
-	res := s.main(ctx, data, end)
-	if s.next != nil {
-		return s.next.Emit(ctx, res, end)
-	}
-
-	if edata, ok := res.(error); ok {
-		return edata
-	}
-
-	return res
-}
-
-// Stream returns a new Stream with the provided Handler.
-func (s *stream) Stream(h interface{}) Stream {
-	var sm Stream
-
-	switch h.(type) {
-	case Stream:
-		sm = h.(Stream)
-	default:
-		sm = MustStream(h)
-	}
-
-	if s.next != nil {
-		return s.next.Stream(sm)
-	}
-
-	return sm
-}
-
 //==============================================================================
 
 var hl = regos.New()

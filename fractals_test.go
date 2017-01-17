@@ -3,6 +3,7 @@ package fractals_test
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -59,26 +60,48 @@ func TestBasicFn(t *testing.T) {
 	logPassed(t, "Total processed values was with count %d", count)
 }
 
-func TestBasicStream(t *testing.T) {
-	sm := fractals.MustStream(func(ctx context.Context, number int, done bool) int {
-		if done {
-			return number * 400
-		}
+func TestObserverEnding(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(1)
 
-		return number * 200
+	ob := fractals.NewObservable(func(name string) string {
+		return "Mr." + name
 	})
 
-	dl := sm.Emit(context.New(), 4, false)
-	if dll, ok := dl.(int); !ok || dll != 800 {
-		fatalFailed(t, "Should have recieved 800 but got %d", dll)
-	}
-	logPassed(t, "Should have recieved 800")
+	ob2 := fractals.NewObservable(func(name string) string {
+		wg.Done()
+		return name + "!"
+	})
 
-	dl = sm.Emit(context.New(), 4, true)
-	if dll, ok := dl.(int); !ok || dll != 1600 {
-		fatalFailed(t, "Should have recieved 1600 but got %d", dll)
-	}
-	logPassed(t, "Should have recieved 1600")
+	obEnd := ob.Subscribe(ob2)
+
+	ob.Next(context.New(), "Thunder")
+	obEnd.End()
+	ob.Next(context.New(), "Walkte")
+	wg.Wait()
+}
+
+func TestObserver(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	ob := fractals.NewObservable(func(name string) string {
+		return "Mr." + name
+	})
+
+	ob2 := fractals.NewObservable(func(name string) string {
+		wg.Done()
+		return name + "!"
+	})
+
+	ob2.Subscribe(fractals.NewObservable(func(name string) {
+		wg.Done()
+	}))
+
+	ob.Subscribe(ob2)
+
+	ob.Next(context.New(), "Thunder")
+	wg.Wait()
 }
 
 func TestSubLift(t *testing.T) {
