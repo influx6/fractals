@@ -60,6 +60,23 @@ func TestBasicFn(t *testing.T) {
 	logPassed(t, "Total processed values was with count %d", count)
 }
 
+func TestMultiSelect(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	hl := fractals.MustWrapSelect(nil, func(name string) string {
+		wg.Done()
+		return "Mr. " + name
+	}, func(number int) int {
+		wg.Done()
+		return 20 * number
+	})
+
+	hl(nil, nil, 40)
+	hl(nil, nil, "wonder")
+	wg.Wait()
+}
+
 func TestObserverEnding(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)

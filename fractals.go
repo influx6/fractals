@@ -1235,6 +1235,73 @@ func WrapStreamHandler(h interface{}) StreamHandler {
 	}
 }
 
+type selectionDetail struct {
+	Fn    Handler
+	Types []reflect.Type
+}
+
+// MustWrapSelect defines a series of single argument functions which when based
+// on the incoming type will match against the selection and get called against
+// that selection. It provides a way of creating a single Handler which uses a
+// multilist of functions to call for it's action.
+// Functions must be in the following type format:
+// 1. func(context.Context, val ExpectedType) returnType
+// 2. func(val ExpectedType) returnType
+// 3. func(val ExpectedType)
+// If none of these matches, then a panic will occur.
+func MustWrapSelect(incoming func(error) interface{}, selections ...interface{}) Handler {
+	var selection []selectionDetail
+
+	for _, item := range selections {
+		if !reflection.IsFuncType(item) {
+			panic("All selection must be functions")
+		}
+
+		args, _ := reflection.GetFuncArgumentsType(item)
+		if len(args) > 2 {
+			panic("Maximum of two argments allowed for each selection function")
+		}
+
+		if len(args) == 2 {
+			if canset, _ := reflection.CanSetForType(ctxType, args[0]); canset {
+				panic("Two argument functions must have context.Context as their first argument")
+			}
+		}
+
+		selection = append(selection, selectionDetail{
+			Fn:    MustWrap(item),
+			Types: args,
+		})
+	}
+
+	return MustWrap(func(ctx context.Context, err error, data interface{}) (interface{}, error) {
+		if err != nil && incoming != nil {
+			res := incoming(err)
+			if eres, ok := res.(error); ok {
+				return nil, eres
+			}
+
+			return res, nil
+		}
+
+		for _, sel := range selection {
+			if len(sel.Types) == 2 {
+				mainT := sel.Types[1]
+				if canset, _ := reflection.StrictCanSetForType(mainT, reflect.TypeOf(data)); canset {
+					return sel.Fn(ctx, nil, data)
+				}
+			}
+
+			mainT := sel.Types[0]
+			if canset, _ := reflection.StrictCanSetForType(mainT, reflect.TypeOf(data)); canset {
+				return sel.Fn(ctx, nil, data)
+			}
+		}
+
+		return data, err
+	})
+}
+
 //==============================================================================
 
 var hl = regos.New()
