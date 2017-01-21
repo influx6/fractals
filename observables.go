@@ -6,6 +6,7 @@ import "github.com/influx6/faux/context"
 // events stream can occur.
 type Observable interface {
 	End()
+	NextVal(interface{})
 	AddFinalizers(...func())
 	Next(context.Context, interface{})
 	Subscribe(Observable, ...func()) Subscription
@@ -101,6 +102,12 @@ func (in *IndefiniteObserver) finalize() {
 	for _, fn := range in.finalizers {
 		fn()
 	}
+}
+
+// NextVal receives the value to be passed to the Observer.Next function and
+// creates a new context for call.
+func (in *IndefiniteObserver) NextVal(val interface{}) {
+	in.Next(context.New(), val)
 }
 
 // Next receives the next input for the observer to run it's internal
