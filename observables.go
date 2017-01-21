@@ -5,8 +5,9 @@ import "github.com/influx6/faux/context"
 // Observable defines a interface that provides a type by which continouse
 // events stream can occur.
 type Observable interface {
-	Subscribe(Observable, ...func()) Subscription
+	End()
 	Next(context.Context, interface{})
+	Subscribe(Observable, ...func()) Subscription
 }
 
 // NewObservable returns a new instance of a Observable.
@@ -59,6 +60,18 @@ func (in *IndefiniteObserver) Subscribe(b Observable, finalizers ...func()) Subs
 	in.subs = append(in.subs, &sub)
 
 	return &sub
+}
+
+// End discloses all subscription to the observer, calling their appropriate
+// finalizers.
+func (in *IndefiniteObserver) End() {
+	for _, sub := range in.subs {
+		if sub.observer == nil {
+			continue
+		}
+
+		sub.End()
+	}
 }
 
 // Next receives the next input for the observer to run it's internal
