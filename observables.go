@@ -6,6 +6,7 @@ import "github.com/influx6/faux/context"
 // events stream can occur.
 type Observable interface {
 	End()
+	AddFinalizers(...func())
 	Next(context.Context, interface{})
 	Subscribe(Observable, ...func()) Subscription
 }
@@ -76,6 +77,13 @@ func (in *IndefiniteObserver) End() {
 	}
 
 	in.finalize()
+}
+
+// AddFinalizers adds the the sets of pure functions to be called once the
+// observers End(), function is called. This allows clean up operations to be
+// performed if required.
+func (in *IndefiniteObserver) AddFinalizers(fx ...func()) {
+	in.finalizers = append(in.finalizers, fx...)
 }
 
 // finalize ends and runs all ending functions to perform any cleanup for the
