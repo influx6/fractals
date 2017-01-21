@@ -19,6 +19,15 @@ func NewObservable(behaviour interface{}, finalizers ...func()) Observable {
 	}
 }
 
+// ReplayObservable returns a new instance of a Observable which replaces it's
+// events down it's subscribers line.
+func ReplayObservable(finalizers ...func()) Observable {
+	return &IndefiniteObserver{
+		onNext:     IdentityHandler(),
+		finalizers: finalizers,
+	}
+}
+
 // Subscription defines a structure which provides a subscription handle for which
 // an observer recieves when registered on a subscription.
 type Subscription interface {
