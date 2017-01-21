@@ -11,9 +11,10 @@ type Observable interface {
 }
 
 // NewObservable returns a new instance of a Observable.
-func NewObservable(behaviour interface{}) Observable {
+func NewObservable(behaviour interface{}, finalizers ...func()) Observable {
 	return &IndefiniteObserver{
-		onNext: MustWrap(behaviour),
+		onNext:     MustWrap(behaviour),
+		finalizers: finalizers,
 	}
 }
 
@@ -46,8 +47,9 @@ func (sub *subscription) End() {
 // of the Observable interface. It provides a baseline interface which others
 // can inherit from.
 type IndefiniteObserver struct {
-	onNext Handler
-	subs   []*subscription
+	onNext     Handler
+	subs       []*subscription
+	finalizers []func() //pure functions which should perform some cleanup.
 }
 
 // Subscribe connects the giving Observer with the provide observer and returns a
@@ -71,6 +73,16 @@ func (in *IndefiniteObserver) End() {
 		}
 
 		sub.End()
+	}
+
+	in.finalize()
+}
+
+// finalize ends and runs all ending functions to perform any cleanup for the
+// observer.
+func (in *IndefiniteObserver) finalize() {
+	for _, fn := range in.finalizers {
+		fn()
 	}
 }
 
