@@ -1,6 +1,11 @@
 package fractals
 
-import "github.com/influx6/faux/context"
+import (
+	"time"
+
+	"github.com/influx6/faux/context"
+	"github.com/influx6/faux/raf"
+)
 
 // Observable defines a interface that provides a type by which continouse
 // events stream can occur.
@@ -10,6 +15,92 @@ type Observable interface {
 	AddFinalizers(...func())
 	Next(context.Context, interface{})
 	Subscribe(Observable, ...func()) Subscription
+}
+
+// MapWithObserver applies the giving predicate to all values the target observer
+// provides returning only values which
+func MapWithObserver(mapPredicate interface{}, target Observable) Observable {
+	ob := NewObservable(mapPredicate)
+	target.Subscribe(ob, ob.End)
+	return ob
+}
+
+// DebounceWithObserverFor applies the giving predicate to all values the target observer
+// provides returning only values which
+func DebounceWithObserverFor(target Observable, dr time.Duration) Observable {
+	var allowed bool
+
+	ticker := time.NewTicker(dr)
+
+	go func() {
+		for {
+			_, closed := <-ticker.C
+			if closed {
+				break
+			}
+
+			if allowed {
+				allowed = false
+			} else {
+				allowed = true
+			}
+		}
+	}()
+
+	ob := NewObservable(func(item interface{}) interface{} {
+		if !allowed {
+			return nil
+		}
+
+		return item
+	}, func() {
+		ticker.Stop()
+	})
+
+	target.Subscribe(ob, ob.End)
+	return ob
+}
+
+// DebounceWithObserver applies the giving predicate to all values the target observer
+// provides returning only values which
+func DebounceWithObserver(target Observable) Observable {
+	var allowed bool
+
+	var id = raf.RequestAnimationFrame(func(df float64) {
+		if allowed {
+			allowed = false
+		} else {
+			allowed = true
+		}
+	})
+
+	ob := NewObservable(func(item interface{}) interface{} {
+		if !allowed {
+			return nil
+		}
+
+		return item
+	}, func() {
+		raf.CancelAnimationFrame(id)
+	})
+
+	target.Subscribe(ob, ob.End)
+	return ob
+}
+
+// FilterWithObserver applies the giving predicate to all values the target observer
+// provides returning only values which
+func FilterWithObserver(predicate func(interface{}) bool, target Observable) Observable {
+	ob := NewObservable(func(item interface{}) interface{} {
+		if predicate(item) {
+			return item
+		}
+
+		return nil
+	})
+
+	target.Subscribe(ob, ob.End)
+	return ob
 }
 
 // NewObservable returns a new instance of a Observable.
