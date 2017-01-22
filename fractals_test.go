@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/influx6/faux/context"
 	"github.com/influx6/fractals"
@@ -95,6 +96,42 @@ func TestObserverEnding(t *testing.T) {
 	ob.Next(context.New(), "Thunder")
 	obEnd.End()
 	ob.Next(context.New(), "Walkte")
+	wg.Wait()
+}
+
+func TestDebounceObserver(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	ob := fractals.NewObservable(func(name string) string {
+		return "Mr." + name
+	})
+
+	ob2 := fractals.DebounceWithObserver(ob, 10*time.Millisecond)
+
+	ob2.Subscribe(fractals.NewObservable(func(name string) {
+		fmt.Printf("Debounce: %s\n", name)
+		wg.Done()
+	}))
+
+	// These items wont be seen.
+	ob.Next(context.New(), "Thunder")
+	ob.Next(context.New(), "Thunder2")
+	ob.Next(context.New(), "Thunder3")
+	ob.Next(context.New(), "Thunder4")
+
+	<-time.After(11 * time.Millisecond)
+	ob.Next(context.New(), "Lightening")
+
+	// These items wont be seen.
+	ob.Next(context.New(), "Thunder")
+	ob.Next(context.New(), "Thunder2")
+	ob.Next(context.New(), "Thunder3")
+	ob.Next(context.New(), "Thunder4")
+
+	<-time.After(11 * time.Millisecond)
+	ob.Next(context.New(), "Slickering")
+
 	wg.Wait()
 }
 

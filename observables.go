@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/influx6/faux/context"
-	"github.com/influx6/faux/raf"
 )
 
 // Observable defines a interface that provides a type by which continouse
@@ -25,25 +24,21 @@ func MapWithObserver(mapPredicate interface{}, target Observable) Observable {
 	return ob
 }
 
-// DebounceWithObserverFor applies the giving predicate to all values the target observer
+// DebounceWithObserver applies the giving predicate to all values the target observer
 // provides returning only values which
-func DebounceWithObserverFor(target Observable, dr time.Duration) Observable {
+func DebounceWithObserver(target Observable, dr time.Duration) Observable {
 	var allowed bool
 
 	ticker := time.NewTicker(dr)
 
 	go func() {
 		for {
-			_, closed := <-ticker.C
-			if closed {
+			_, open := <-ticker.C
+			if !open {
 				break
 			}
 
-			if allowed {
-				allowed = false
-			} else {
-				allowed = true
-			}
+			allowed = true
 		}
 	}()
 
@@ -52,36 +47,10 @@ func DebounceWithObserverFor(target Observable, dr time.Duration) Observable {
 			return nil
 		}
 
+		allowed = false
 		return item
 	}, func() {
 		ticker.Stop()
-	})
-
-	target.Subscribe(ob, ob.End)
-	return ob
-}
-
-// DebounceWithObserver applies the giving predicate to all values the target observer
-// provides returning only values which
-func DebounceWithObserver(target Observable) Observable {
-	var allowed bool
-
-	var id = raf.RequestAnimationFrame(func(df float64) {
-		if allowed {
-			allowed = false
-		} else {
-			allowed = true
-		}
-	})
-
-	ob := NewObservable(func(item interface{}) interface{} {
-		if !allowed {
-			return nil
-		}
-
-		return item
-	}, func() {
-		raf.CancelAnimationFrame(id)
 	})
 
 	target.Subscribe(ob, ob.End)
