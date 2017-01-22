@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/influx6/faux/context"
+	"github.com/influx6/faux/raf"
 )
 
 // Observable defines a interface that provides a type by which continouse
@@ -20,6 +21,30 @@ type Observable interface {
 // provides returning only values which
 func MapWithObserver(mapPredicate interface{}, target Observable) Observable {
 	ob := NewObservable(mapPredicate)
+	target.Subscribe(ob, ob.End)
+	return ob
+}
+
+// DebounceRAFWithObserver applies the giving predicate to all values the target observer
+// provides returning only values which
+func DebounceRAFWithObserver(target Observable) Observable {
+	var allowed bool
+
+	id := raf.RequestAnimationFrame(func(dt float64) {
+		allowed = true
+	})
+
+	ob := NewObservable(func(item interface{}) interface{} {
+		if !allowed {
+			return nil
+		}
+
+		allowed = false
+		return item
+	}, func() {
+		raf.CancelAnimationFrame(id)
+	})
+
 	target.Subscribe(ob, ob.End)
 	return ob
 }
