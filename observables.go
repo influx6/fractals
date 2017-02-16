@@ -77,7 +77,7 @@ func ReplayObservable() Observable {
 }
 
 // MapWithObserver applies the giving predicate to all values the target observer
-// provides returning only values which
+// provides returning only values which match.
 func MapWithObserver(mapPredicate Behaviour, target Observable) Observable {
 	ob := NewObservable(mapPredicate, false)
 	target.Subscribe(ob, ob.End)
@@ -85,7 +85,8 @@ func MapWithObserver(mapPredicate Behaviour, target Observable) Observable {
 }
 
 // DebounceRAFWithObserver applies the giving predicate to all values the target observer
-// provides returning only values which
+// provides returning only values which match. It attempts to use the RAF implementation
+// to work.
 func DebounceRAFWithObserver(target Observable) Observable {
 	var allowed bool
 
@@ -113,7 +114,7 @@ func DebounceRAFWithObserver(target Observable) Observable {
 }
 
 // DebounceWithObserver applies the giving predicate to all values the target observer
-// provides returning only values which
+// provides returning only values which matches and uses the time.Ticker.
 func DebounceWithObserver(target Observable, dr time.Duration) Observable {
 	var allowed bool
 
@@ -153,7 +154,7 @@ func DebounceWithObserver(target Observable, dr time.Duration) Observable {
 }
 
 // FilterWithObserver applies the giving predicate to all values the target observer
-// provides returning only values which
+// provides returning only values which match.
 func FilterWithObserver(predicate func(interface{}) bool, target Observable) Observable {
 	ob := NewObservable(Behaviour{
 		Next: MustWrap(func(item interface{}) interface{} {
