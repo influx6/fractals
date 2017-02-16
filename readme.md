@@ -2,7 +2,7 @@
 Fractal evolved out of an experiment in using middleware like patterns to create
 functional programming behavior in Go. It provides functions as its expressive
 approach to create operations that both are pure and combinative. In essence
-follows the idea of a stack of task combined for reuse.
+follows the idea of a stack of pure functions combined for reuse.
 
 ## Install
 
@@ -52,6 +52,8 @@ func IndexServer(dir string, index string, prefix string) fractals.Handler {
 - Observable Examples
 
 ```go
+  var wg sync.WaitGroup
+
 	ob := fractals.NewObservable(fractals.NewBehaviour(func(name string) string {
 		return "Mr." + name
 	}, nil, nil), false)
