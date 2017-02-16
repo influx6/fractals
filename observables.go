@@ -104,10 +104,11 @@ func DebounceRAFWithObserver(target Observable) Observable {
 			allowed = false
 			return item
 		}),
-		Done: MustWrap(func() {
-			raf.CancelAnimationFrame(id)
-		}),
 	}, false)
+
+	ob.AddFinalizer(func() {
+		raf.CancelAnimationFrame(id)
+	})
 
 	target.Subscribe(ob)
 
@@ -141,13 +142,14 @@ func DebounceWithObserver(target Observable, dr time.Duration) Observable {
 			allowed = false
 			return item
 		}),
-		Done: MustWrap(func() {
-			if ticker != nil {
-				ticker.Stop()
-				ticker = nil
-			}
-		}),
 	}, false)
+
+	ob.AddFinalizer(func() {
+		if ticker != nil {
+			ticker.Stop()
+			ticker = nil
+		}
+	})
 
 	target.Subscribe(ob)
 
@@ -213,6 +215,11 @@ func (sub *Subscription) End() {
 // End discloses all subscription to the observer, calling their appropriate
 // finalizers.
 func (in *IndefiniteObserver) End() {
+	defer func() {
+		in.finalizers = nil
+		in.subs = nil
+	}()
+
 	for _, fl := range in.finalizers {
 		fl()
 	}
