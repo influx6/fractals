@@ -82,14 +82,15 @@ func TestObserverEnding(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	ob := fractals.NewObservable(func(name string) string {
+	ob := fractals.NewObservable(fractals.NewBehaviour(func(name string) string {
 		return "Mr." + name
-	})
+	}, nil, nil), false)
 
-	ob2 := fractals.NewObservable(func(name string) string {
+	ob2 := fractals.NewObservable(fractals.NewBehaviour(func(name string) string {
+		fmt.Printf("Calling End: %q\n", name)
 		wg.Done()
 		return name + "!"
-	})
+	}, nil, nil), false)
 
 	obEnd := ob.Subscribe(ob2)
 
@@ -103,16 +104,16 @@ func TestDebounceObserver(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	ob := fractals.NewObservable(func(name string) string {
+	ob := fractals.NewObservable(fractals.NewBehaviour(func(name string) string {
 		return "Mr." + name
-	})
+	}, nil, nil), false)
 
 	ob2 := fractals.DebounceWithObserver(ob, 10*time.Millisecond)
 
-	ob2.Subscribe(fractals.NewObservable(func(name string) {
+	ob2.Subscribe(fractals.NewObservable(fractals.NewBehaviour(func(name string) {
 		fmt.Printf("Debounce: %s\n", name)
 		wg.Done()
-	}))
+	}, nil, nil), false))
 
 	// These items wont be seen.
 	ob.Next(context.New(), "Thunder")
@@ -139,18 +140,18 @@ func TestObserver(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	ob := fractals.NewObservable(func(name string) string {
+	ob := fractals.NewObservable(fractals.NewBehaviour(func(name string) string {
 		return "Mr." + name
-	})
+	}, nil, nil), false)
 
-	ob2 := fractals.NewObservable(func(name string) string {
+	ob2 := fractals.NewObservable(fractals.NewBehaviour(func(name string) string {
 		wg.Done()
 		return name + "!"
-	})
+	}, nil, nil), false)
 
-	ob2.Subscribe(fractals.NewObservable(func(name string) {
+	ob2.Subscribe(fractals.NewObservable(fractals.NewBehaviour(func(name string) {
 		wg.Done()
-	}))
+	}, nil, nil), false))
 
 	ob.Subscribe(ob2)
 
