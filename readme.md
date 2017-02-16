@@ -10,6 +10,38 @@ follows the idea of a stack of pure functions combined for reuse.
 go get -u -v github.com/influx6/fractals
 ```
 
+## Warning
+Fractals uses `reflect` underneath as a means of providing a side effect of meeting
+the types desired if the `interface{}` type is not used in the functions provided.
+This does drastically affect the speed of the functions per operations but generally
+this is a consistent state when `reflect` is being used.
+
+So for greater performance in critical paths it's best to utilize `interface{}`
+as variable type when needed.
+
+- Relatively Slower Handler due to reflect.
+```go
+func MimeWriter() fractals.Handler {
+	return fractals.MustWrap(func(rw *Request) *Request {
+		ctn := mimes.GetByExtensionName(filepath.Ext(rw.Req.URL.Path))
+		rw.Res.Header().Add("Content-Type", ctn)
+		return rw
+	})
+}
+```
+
+- Relatively Faster Handler due to reflect.
+```go
+func MimeWriter() fractals.Handler {
+	return fractals.MustWrap(func(rws interface{}) *Request {
+    rw, _ := rws.(*Request)
+		ctn := mimes.GetByExtensionName(filepath.Ext(rw.Req.URL.Path))
+		rw.Res.Header().Add("Content-Type", ctn)
+		return rw
+	})
+}
+```
+
 ## Example
 
 - Handler Examples
