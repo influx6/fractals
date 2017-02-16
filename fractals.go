@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"runtime"
 
 	"github.com/influx6/faux/context"
 	"github.com/influx6/faux/reflection"
@@ -27,6 +28,31 @@ var (
 	dZeroError = reflect.Zero(errorType)
 	dZeroBool  = reflect.Zero(boolType)
 )
+
+//==============================================================================
+
+// PanicError defines a structure which defines a type returned when panics occur
+// in functions.
+type PanicError struct {
+	Stacks []byte
+	Err    error
+}
+
+// Error returns the error and stack trace that occured.
+func (p PanicError) Error() string {
+	return fmt.Sprintf(`Error: %q
+Panic Stack:
+%+s
+`, p.Err, p.Stacks)
+}
+
+// String returns the error and stack trace that occured.
+func (p PanicError) String() string {
+	return fmt.Sprintf(`Error: %q
+Panic Stack:
+%+s
+`, p.Err, p.Stacks)
+}
 
 //==============================================================================
 
@@ -293,7 +319,29 @@ func Wrap(node interface{}) Handler {
 		}
 	}
 
-	return hl
+	return func(ctx context.Context, err error, d interface{}) (interface{}, error) {
+		var newErr error
+		var res interface{}
+
+		defer func() {
+			if err := recover(); err != nil {
+				if pErr, ok := err.(PanicError); ok {
+					newErr = pErr
+					return
+				}
+
+				if realErr, ok := err.(error); ok {
+					newErr = PanicError{
+						Err:    realErr,
+						Stacks: pullTrace(true, 1<<16),
+					}
+				}
+			}
+		}()
+
+		res, newErr = hl(ctx, err, d)
+		return res, newErr
+	}
 }
 
 // DiscardData returns a new Handler which discards it's data and only forwards
@@ -542,14 +590,19 @@ func MustMagicApplier(handle interface{}) SubApplier {
 // MagicApplier wraps the function type recieved applying any magic for the
 // expected types, returning a SubApplier to call the functions as needed.
 func MagicApplier(handle interface{}) SubApplier {
+	var hl SubApplier
+
 	switch handle.(type) {
 	case func(context.Context, interface{}, interface{}) (interface{}, error):
-		return handle.(func(context.Context, interface{}, interface{}) (interface{}, error))
+		hl = handle.(func(context.Context, interface{}, interface{}) (interface{}, error))
+
 	case func(interface{}, interface{}) (interface{}, error):
-		hl := handle.(func(interface{}, interface{}) (interface{}, error))
-		return func(_ context.Context, d1 interface{}, d2 interface{}) (interface{}, error) {
-			return hl(d1, d2)
+		hld := handle.(func(interface{}, interface{}) (interface{}, error))
+
+		hl = func(_ context.Context, d1 interface{}, d2 interface{}) (interface{}, error) {
+			return hld(d1, d2)
 		}
+
 	default:
 		if !reflection.IsFuncType(handle) {
 			return nil
@@ -600,7 +653,7 @@ func MagicApplier(handle interface{}) SubApplier {
 			d2Zero = reflect.Zero(d2)
 		}
 
-		return func(ctx context.Context, dl interface{}, rl interface{}) (interface{}, error) {
+		hl = func(ctx context.Context, dl interface{}, rl interface{}) (interface{}, error) {
 			var fnArgs []reflect.Value
 			var resArgs []reflect.Value
 
@@ -727,6 +780,31 @@ func MagicApplier(handle interface{}) SubApplier {
 			return rData, nil
 		}
 	}
+
+	return func(ctx context.Context, ld interface{}, dd interface{}) (interface{}, error) {
+		var newErr error
+		var res interface{}
+
+		defer func() {
+			if err := recover(); err != nil {
+				if pErr, ok := err.(PanicError); ok {
+					newErr = pErr
+					return
+				}
+
+				if realErr, ok := err.(error); ok {
+					newErr = PanicError{
+						Err:    realErr,
+						Stacks: pullTrace(true, 1<<16),
+					}
+				}
+			}
+		}()
+
+		res, newErr = hl(ctx, ld, dd)
+		return res, newErr
+	}
+
 }
 
 // SubLift provides a intericate link of combining operations of desimilar
@@ -1092,9 +1170,11 @@ type StreamHandler func(context.Context, interface{}, bool) interface{}
 
 // WrapStreamHandler wraps a handler returning a StreamHandler.
 func WrapStreamHandler(h interface{}) StreamHandler {
+	var hl StreamHandler
+
 	switch h.(type) {
 	case func(context.Context, error, interface{}) (interface{}, error):
-		return func(ctx context.Context, data interface{}, end bool) interface{} {
+		hl = func(ctx context.Context, data interface{}, end bool) interface{} {
 			if ed, ok := data.(error); ok {
 				res, err := (h.(func(context.Context, error, interface{}) (interface{}, error)))(ctx, ed, nil)
 				if err != nil {
@@ -1113,7 +1193,7 @@ func WrapStreamHandler(h interface{}) StreamHandler {
 		}
 
 	case func(context.Context, interface{}, bool) interface{}:
-		return h.(func(context.Context, interface{}, bool) interface{})
+		hl = h.(func(context.Context, interface{}, bool) interface{})
 
 	default:
 		if !reflection.IsFuncType(h) {
@@ -1167,7 +1247,7 @@ func WrapStreamHandler(h interface{}) StreamHandler {
 			useData = true
 		}
 
-		return func(ctx context.Context, val interface{}, done bool) interface{} {
+		hl = func(ctx context.Context, val interface{}, done bool) interface{} {
 			var fnArgs []reflect.Value
 			var resArgs []reflect.Value
 
@@ -1232,6 +1312,29 @@ func WrapStreamHandler(h interface{}) StreamHandler {
 
 			return resArgs[0].Interface()
 		}
+	}
+
+	return func(ctx context.Context, ld interface{}, dd bool) interface{} {
+		var res interface{}
+
+		defer func() {
+			if err := recover(); err != nil {
+				if pErr, ok := err.(PanicError); ok {
+					res = pErr
+					return
+				}
+
+				if realErr, ok := err.(error); ok {
+					res = PanicError{
+						Err:    realErr,
+						Stacks: pullTrace(true, 1<<16),
+					}
+				}
+			}
+		}()
+
+		res = hl(ctx, ld, dd)
+		return res
 	}
 }
 
@@ -1366,4 +1469,16 @@ func makeDo(res HandlerMap, items []regos.Do) error {
 	}
 
 	return nil
+}
+
+//================================================================================
+
+func pullTrace(all bool, size int) []byte {
+	if size == 0 {
+		size = 1 << 16
+	}
+
+	trace := make([]byte, size)
+	trace = trace[:runtime.Stack(trace, all)]
+	return trace
 }
