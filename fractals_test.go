@@ -87,7 +87,6 @@ func TestObserverEnding(t *testing.T) {
 	}, nil, nil), false)
 
 	ob2 := fractals.NewObservable(fractals.NewBehaviour(func(name string) string {
-		fmt.Printf("Calling End: %q\n", name)
 		wg.Done()
 		return name + "!"
 	}, nil, nil), false)
