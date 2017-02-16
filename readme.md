@@ -73,4 +73,8 @@ func IndexServer(dir string, index string, prefix string) fractals.Handler {
 	ob.Next(context.New(), "Lightening")
 
   ob.Done()
+  ob.End()
+
+  ob2.Done()
+  ob2.End()
 ```
