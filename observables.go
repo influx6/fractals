@@ -350,7 +350,7 @@ func (in *IndefiniteObserver) Async() Observable {
 
 	return &IndefiniteObserver{
 		behaviour: in.behaviour,
-		subs:      in.subs,
+		subs:      in.subs[:len(in.subs)],
 		doAsync:   true,
 	}
 }
@@ -366,7 +366,7 @@ func (in *IndefiniteObserver) Sync() Observable {
 
 	return &IndefiniteObserver{
 		behaviour: in.behaviour,
-		subs:      in.subs,
+		subs:      in.subs[:len(in.subs)],
 		doAsync:   false,
 	}
 }
