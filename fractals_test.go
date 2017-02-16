@@ -141,8 +141,9 @@ func TestMultiSelect(t *testing.T) {
 	wg.Wait()
 }
 
-// BenchmarkNodes benches the performance of using the Node api.
-func BenchmarkNodes(b *testing.B) {
+// BenchmarkWithReflect benches the performance of using the fractals pure functions
+// with using the reflection capibilities of Go to figure out the needed type.
+func BenchmarkWithReflect(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()
 
@@ -156,7 +157,8 @@ func BenchmarkNodes(b *testing.B) {
 	}
 }
 
-// BenchmarkNoReflect benches the performance of using the Node api.
+// BenchmarkNoReflect benches the performance of using the fractals pure function
+// with use of interface type which bypasses any calls to the reflect package.
 func BenchmarkNoReflect(b *testing.B) {
 	b.ResetTimer()
 	b.ReportAllocs()

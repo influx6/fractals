@@ -19,7 +19,7 @@ this is a consistent state when `reflect` is being used.
 Run benchmarks in the tests files to see difference:
 
 ```bash
-BenchmarkNodes-4       	 1000000	      1698 ns/op	      72 B/op	       3 allocs/op
+BenchmarkWithReflect-4       	 1000000	      1698 ns/op	      72 B/op	       3 allocs/op
 BenchmarkNoReflect-4   	10000000	       124 ns/op	      16 B/op	       2 allocs/op
 ```
 
