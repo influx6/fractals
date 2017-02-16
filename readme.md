@@ -37,7 +37,7 @@ func MimeWriter() fractals.Handler {
 }
 ```
 
-- Relatively Faster Handler due to reflect.
+- Relatively Faster Handler due to no reflect.
 ```go
 func MimeWriter() fractals.Handler {
 	return fractals.MustWrap(func(rws interface{}) *Request {
