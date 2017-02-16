@@ -49,6 +49,7 @@ type Observable interface {
 	DoneVal(interface{})
 	Done(context.Context, interface{})
 	Next(context.Context, interface{})
+	AddFinalizer(func())
 	Subscribe(Observable, ...func()) *Subscription
 }
 
@@ -174,9 +175,10 @@ func FilterWithObserver(predicate func(interface{}) bool, target Observable) Obs
 // of the Observable interface. It provides a baseline interface which others
 // can inherit from.
 type IndefiniteObserver struct {
-	behaviour Behaviour
-	subs      []*Subscription
-	doAsync   bool
+	behaviour  Behaviour
+	subs       []*Subscription
+	finalizers []func()
+	doAsync    bool
 }
 
 // Subscribe connects the giving Observer with the provide observer and returns a
@@ -211,6 +213,10 @@ func (sub *Subscription) End() {
 // End discloses all subscription to the observer, calling their appropriate
 // finalizers.
 func (in *IndefiniteObserver) End() {
+	for _, fl := range in.finalizers {
+		fl()
+	}
+
 	for _, sub := range in.subs {
 		if sub.observer == nil {
 			continue
@@ -218,6 +224,12 @@ func (in *IndefiniteObserver) End() {
 
 		sub.End()
 	}
+}
+
+// AddFinalizer adds a giving finalizer which will be runned when the giving
+// observer has ended.
+func (in *IndefiniteObserver) AddFinalizer(val func()) {
+	in.finalizers = append(in.finalizers, val)
 }
 
 // NextVal receives the value to be passed to the Observer.Next function and
