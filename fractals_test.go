@@ -6,7 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/influx6/faux/context"
 	"github.com/influx6/fractals"
@@ -59,103 +58,6 @@ func TestBasicFn(t *testing.T) {
 		fatalFailed(t, "Total processed values is not equal, expected %d but got %d", 2, count)
 	}
 	logPassed(t, "Total processed values was with count %d", count)
-}
-
-func TestMultiSelect(t *testing.T) {
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	hl := fractals.MustWrapSelect(nil, func(name string) string {
-		wg.Done()
-		return "Mr. " + name
-	}, func(number int) int {
-		wg.Done()
-		return 20 * number
-	})
-
-	hl(nil, nil, 40)
-	hl(nil, nil, "wonder")
-	wg.Wait()
-}
-
-func TestObserverEnding(t *testing.T) {
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	ob := fractals.NewObservable(fractals.NewBehaviour(func(name string) string {
-		return "Mr." + name
-	}, nil, nil), false)
-
-	ob2 := fractals.NewObservable(fractals.NewBehaviour(func(name string) string {
-		wg.Done()
-		return name + "!"
-	}, nil, nil), false)
-
-	obEnd := ob.Subscribe(ob2)
-
-	ob.Next(context.New(), "Thunder")
-	obEnd.End()
-	ob.Next(context.New(), "Walkte")
-	wg.Wait()
-}
-
-func TestDebounceObserver(t *testing.T) {
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	ob := fractals.NewObservable(fractals.NewBehaviour(func(name string) string {
-		return "Mr." + name
-	}, nil, nil), false)
-
-	ob2 := fractals.DebounceWithObserver(ob, 10*time.Millisecond)
-
-	ob2.Subscribe(fractals.NewObservable(fractals.NewBehaviour(func(name string) {
-		fmt.Printf("Debounce: %s\n", name)
-		wg.Done()
-	}, nil, nil), false))
-
-	// These items wont be seen.
-	ob.Next(context.New(), "Thunder")
-	ob.Next(context.New(), "Thunder2")
-	ob.Next(context.New(), "Thunder3")
-	ob.Next(context.New(), "Thunder4")
-
-	<-time.After(11 * time.Millisecond)
-	ob.Next(context.New(), "Lightening")
-
-	// These items wont be seen.
-	ob.Next(context.New(), "Thunder")
-	ob.Next(context.New(), "Thunder2")
-	ob.Next(context.New(), "Thunder3")
-	ob.Next(context.New(), "Thunder4")
-
-	<-time.After(11 * time.Millisecond)
-	ob.Next(context.New(), "Slickering")
-
-	wg.Wait()
-}
-
-func TestObserver(t *testing.T) {
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	ob := fractals.NewObservable(fractals.NewBehaviour(func(name string) string {
-		return "Mr." + name
-	}, nil, nil), false)
-
-	ob2 := fractals.NewObservable(fractals.NewBehaviour(func(name string) string {
-		wg.Done()
-		return name + "!"
-	}, nil, nil), false)
-
-	ob2.Subscribe(fractals.NewObservable(fractals.NewBehaviour(func(name string) {
-		wg.Done()
-	}, nil, nil), false))
-
-	ob.Subscribe(ob2)
-
-	ob.Next(context.New(), "Thunder")
-	wg.Wait()
 }
 
 func TestSubLift(t *testing.T) {
@@ -220,6 +122,23 @@ func TestAutoFn(t *testing.T) {
 		fatalFailed(t, "Total processed values is not equal, expected %d but got %d", 2, count)
 	}
 	logPassed(t, "Total processed values was with count %d", count)
+}
+
+func TestMultiSelect(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	hl := fractals.MustWrapSelect(nil, func(name string) string {
+		wg.Done()
+		return "Mr. " + name
+	}, func(number int) int {
+		wg.Done()
+		return 20 * number
+	})
+
+	hl(nil, nil, 40)
+	hl(nil, nil, "wonder")
+	wg.Wait()
 }
 
 // BenchmarkNodes benches the performance of using the Node api.
