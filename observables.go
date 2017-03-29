@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/influx6/faux/context"
-	"github.com/influx6/faux/raf"
 )
 
 var identity = IdentityHandler()
@@ -82,36 +81,6 @@ func ReplayObservable() Observable {
 func MapWithObserver(mapPredicate Behaviour, target Observable) Observable {
 	ob := NewObservable(mapPredicate, false)
 	target.Subscribe(ob, ob.End)
-	return ob
-}
-
-// DebounceRAFWithObserver applies the giving predicate to all values the target observer
-// provides returning only values which match. It attempts to use the RAF implementation
-// to work.
-func DebounceRAFWithObserver(target Observable) Observable {
-	var allowed bool
-
-	id := raf.RequestAnimationFrame(func(dt float64) {
-		allowed = true
-	})
-
-	ob := NewObservable(Behaviour{
-		Next: MustWrap(func(item interface{}) interface{} {
-			if !allowed {
-				return nil
-			}
-
-			allowed = false
-			return item
-		}),
-	}, false)
-
-	ob.AddFinalizer(func() {
-		raf.CancelAnimationFrame(id)
-	})
-
-	target.Subscribe(ob)
-
 	return ob
 }
 
