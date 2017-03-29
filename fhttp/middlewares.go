@@ -1,6 +1,9 @@
 package fhttp
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -10,6 +13,78 @@ import (
 	"github.com/influx6/fractals/fhttp/mimes"
 	"github.com/influx6/fractals/fs"
 )
+
+// CORS setup a generic CORS hader within the response for recieved request response.
+func CORS() fractals.Handler {
+	return fractals.MustWrap(func(wm *Request) *Request {
+		wm.Res.Header().Set("Access-Control-Allow-Origin", "*")
+		wm.Res.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+		wm.Res.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		wm.Res.Header().Set("Access-Control-Max-Age", "86400")
+		return wm
+	})
+}
+
+// JSONDecoder decodes the data it recieves into an map type and returns the values.
+func JSONDecoder() fractals.Handler {
+	return fractals.MustWrap(func(ctx context.Context, data []byte) (map[string]interface{}, error) {
+		ms := make(map[string]interface{})
+
+		var b bytes.Buffer
+		b.Write(data)
+
+		if err := json.NewDecoder(&b).Decode(&ms); err != nil {
+			return nil, err
+		}
+
+		return ms, nil
+	})
+}
+
+// JSONWrite encodes the data it recieves into JSON and returns the values.
+func JSONWrite(data interface{}) fractals.Handler {
+	var bu bytes.Buffer
+	var done bool
+
+	return fractals.MustWrap(func(ctx context.Context, w io.Writer) error {
+		if !done {
+			if err := json.NewEncoder(&bu).Encode(data); err != nil {
+				return err
+			}
+
+			done = true
+		}
+
+		if _, err := w.Write(bu.Bytes()); err != nil {
+			return err
+		}
+
+		return nil
+	})
+}
+
+// JSONEncoder encodes the data it recieves into JSON and returns the values.
+func JSONEncoder() fractals.Handler {
+	return fractals.MustWrap(func(ctx context.Context, data interface{}) ([]byte, error) {
+		var d bytes.Buffer
+
+		if err := json.NewEncoder(&d).Encode(data); err != nil {
+			return nil, err
+		}
+
+		return d.Bytes(), nil
+	})
+}
+
+// Headers returns a fractals.Handler which hads the provided values into the
+// response headers.
+func Headers(h map[string]string) fractals.Handler {
+	return fractals.MustWrap(func(ctx context.Context, wm *Request) {
+		for key, value := range h {
+			wm.Res.Header().Set(key, value)
+		}
+	})
+}
 
 // MimeWriter tries to extract the mime type from the possible extension in
 // the URL path name and applies that to the request.
@@ -27,6 +102,20 @@ func MimeWriterFor(file string) fractals.Handler {
 	return fractals.MustWrap(func(rw *Request) *Request {
 		ctn := mimes.GetByExtensionName(filepath.Ext(file))
 		rw.Res.Header().Add("Content-Type", ctn)
+		return rw
+	})
+}
+
+// AccessControlWriter tries to extract the mime type from the possible extension in
+// the URL path name and applies that to the request.
+func AccessControlWriter(headers map[string]string) fractals.Handler {
+	return fractals.MustWrap(func(rw *Request) *Request {
+
+		// Add New header values.
+		for key, val := range headers {
+			rw.Res.Header().Add(key, val)
+		}
+
 		return rw
 	})
 }
